@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Psychrometric Chart — ASHRAE-Accurate</title>
+    <meta name="description"
+        content="Fully interactive psychrometric chart with real-time calculations, formula display, and educational overlays. Based on ASHRAE Handbook fundamentals.">
+
+    <!-- KaTeX for mathematical formula rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <!-- ===================== HEADER ===================== -->
+    <header>
+        <div class="logo-area">
+            <div class="logo-icon">ψ</div>
+            <div class="logo-text">
+                <h1>Psychrometric Chart</h1>
+                <span>Interactive · ASHRAE-Accurate · Educational</span>
+            </div>
+        </div>
+        <div class="header-actions">
+            <!-- Line toggles group -->
+            <div class="header-group">
+                <span class="line-toggle active" data-line="rh"><span class="toggle-dot"
+                        style="background:var(--accent)"></span>RH</span>
+                <span class="line-toggle active" data-line="twb"><span class="toggle-dot"
+                        style="background:var(--accent-2)"></span>Twb</span>
+                <span class="line-toggle active" data-line="enth"><span class="toggle-dot"
+                        style="background:var(--accent-3)"></span>h</span>
+                <span class="line-toggle active" data-line="vol"><span class="toggle-dot"
+                        style="background:var(--accent-4)"></span>v</span>
+            </div>
+            <!-- Labels toggle -->
+            <span class="chart-labels-toggle active" id="toggle-labels"
+                title="Show/hide value labels on chart">🏷️</span>
+            <!-- Pin badge (always visible in header) -->
+            <span class="pin-badge" id="pin-badge" title="Click to unpin">📌 Pinned</span>
+            <!-- Separator -->
+            <div class="header-sep"></div>
+            <!-- Unit toggle -->
+            <div class="unit-toggle" id="unit-toggle">
+                <button class="unit-toggle-btn active" data-unit="C" id="unit-c-btn">°C</button>
+                <button class="unit-toggle-btn" data-unit="F" id="unit-f-btn">°F</button>
+            </div>
+            <!-- Separator -->
+            <div class="header-sep"></div>
+            <!-- Help & theme -->
+            <button class="icon-btn" id="help-btn" aria-label="Show tutorial" title="How to use">❓</button>
+            <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">🌙</button>
+        </div>
+    </header>
+
+    <!-- ===================== TUTORIAL OVERLAY ===================== -->
+    <div id="tutorial-overlay">
+        <div class="tutorial-card">
+            <h2>ψ Interactive Psychrometric Chart</h2>
+            <p class="sub">I've always found psychrometric charts irritating to read manually (yes, I'm that guy), so I
+                built one you can actually <em>play</em> with. Hover, pin, tweak any value — it all updates in real
+                time, with live formulas showing the math. The ideas and design are mine; the coding was done with the
+                help of Antigravity.</p>
+
+            <h3>🖱️ How to use</h3>
+            <ul>
+                <li><strong>Hover</strong> (or drag on mobile) to explore — the crosshair follows you with live values.
+                </li>
+                <li><strong>Click / Tap</strong> to pin a point. While pinned, <strong>edit any value</strong> or use
+                    the ▲/▼ arrows.</li>
+                <li>Toggle <strong>°C / °F</strong>, show/hide <strong>lines</strong> (RH, Twb, h, v), and flip
+                    <strong>labels</strong> on/off — all from the header.
+                </li>
+                <li>Switch to the <strong>Formulas</strong> tab to see every calculation step rendered in real time.
+                </li>
+            </ul>
+
+            <h3>📈 The lines</h3>
+            <ul>
+                <li><span class="color-key" style="background:#58a6ff"></span><strong>Blue</strong> — Relative Humidity
+                    curves</li>
+                <li><span class="color-key" style="background:#3fb950"></span><strong>Green</strong> — Wet Bulb
+                    Temperature</li>
+                <li><span class="color-key" style="background:#f85149"></span><strong>Red dashed</strong> — Enthalpy
+                    (kJ/kg)</li>
+                <li><span class="color-key" style="background:#bc8cff"></span><strong>Purple dashed</strong> — Specific
+                    Volume (m³/kg)</li>
+            </ul>
+
+            <p style="font-size:12px;color:var(--text-muted);margin-top:12px">ASHRAE Handbook — Fundamentals (SI) · 101
+                325 Pa · MIT License — use it however you want.</p>
+            <p style="font-size:12px;color:var(--text-secondary);margin-top:4px"><strong>Built for anyone who thinks
+                    this stuff is actually pretty cool (like me).</strong> If you also struggled to manually read these
+                charts, I hope this makes your day a little better. Enjoy!</p>
+
+            <button class="tutorial-close-btn" id="tutorial-close">Got it — Let's explore!</button>
+        </div>
+    </div>
+
+    <!-- ===================== MAIN ===================== -->
+    <main>
+        <!-- Chart canvas area -->
+        <div id="chart-container">
+            <canvas id="static-canvas"></canvas>
+            <canvas id="dynamic-canvas"></canvas>
+        </div>
+
+        <!-- Side panel -->
+        <aside id="side-panel">
+            <!-- Tab bar -->
+            <div class="tab-bar">
+                <button class="tab-btn active" data-tab="properties">Air Properties</button>
+                <button class="tab-btn" data-tab="formulas">Formulas</button>
+            </div>
+
+            <!-- Tab: Properties -->
+            <div class="tab-content active" id="tab-properties">
+                <div class="panel-section">
+                    <div class="panel-title">State Point</div>
+
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-tdb"></span>Dry Bulb Temp</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="tdb"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="tdb"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-tdb" step="0.1" placeholder="—" disabled><span class="val-unit"
+                                id="unit-tdb">°C</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-rh"></span>Relative Humidity</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="rh"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="rh"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-rh" step="0.1" min="0" max="100" placeholder="—" disabled><span
+                                class="val-unit">%</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-twb"></span>Wet Bulb Temp</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="twb"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="twb"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-twb" step="0.1" placeholder="—" disabled><span class="val-unit"
+                                id="unit-twb">°C</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-tdp"></span>Dew Point Temp</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="tdp"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="tdp"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-tdp" step="0.1" placeholder="—" disabled><span class="val-unit"
+                                id="unit-tdp">°C</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-w"></span>Humidity Ratio</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="w"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="w"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-w" step="0.01" placeholder="—" disabled><span
+                                class="val-unit">g/kg</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-h"></span>Enthalpy</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="h"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="h"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-h" step="0.1" placeholder="—" disabled><span
+                                class="val-unit">kJ/kg</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-v"></span>Specific Volume</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="v"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="v"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-v" step="0.0001" placeholder="—" disabled><span
+                                class="val-unit">m³/kg</span></span>
+                    </div>
+                    <div class="val-row">
+                        <span class="val-label"><span class="val-dot c-pw"></span>Vapour Pressure</span>
+                        <span class="val-right"><span class="val-stepper"><button class="step-btn" data-field="pw"
+                                    data-dir="1" disabled>▲</button><button class="step-btn" data-field="pw"
+                                    data-dir="-1" disabled>▼</button></span><input type="number" class="val-input"
+                                id="val-pw" step="1" placeholder="—" disabled><span class="val-unit">Pa</span></span>
+                    </div>
+                </div>
+
+                <!-- Info footer -->
+                <div class="panel-section panel-footer">
+                    <strong>Reference:</strong> ASHRAE Handbook — Fundamentals (SI)<br>
+                    Standard pressure: 101 325 Pa (sea level)<br>
+                    Click chart to pin, then edit any value.
+                </div>
+            </div>
+
+            <!-- Tab: Formulas -->
+            <div class="tab-content" id="tab-formulas">
+                <div class="panel-section">
+                    <div class="formula-item">
+                        <div class="f-label">Saturation Pressure</div>
+                        <div class="f-math" id="f-pws"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Partial Pressure</div>
+                        <div class="f-math" id="f-pw"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Humidity Ratio</div>
+                        <div class="f-math" id="f-w"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Relative Humidity</div>
+                        <div class="f-math" id="f-rh"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Enthalpy</div>
+                        <div class="f-math" id="f-h"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Specific Volume</div>
+                        <div class="f-math" id="f-v"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Dew Point</div>
+                        <div class="f-math" id="f-tdp"></div>
+                    </div>
+                    <div class="formula-item">
+                        <div class="f-label">Wet Bulb</div>
+                        <div class="f-math" id="f-twb"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Scripts (order matters) -->
+    <script src="psychro.js"></script>
+    <script src="chart.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
