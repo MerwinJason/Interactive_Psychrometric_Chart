@@ -4,7 +4,7 @@
 
 I've always found psychrometric charts irritating to read manually (yes, I'm that person). So I built one you can actually *play* with — hover around, pin a point, tweak any value, and watch everything update in real time. It even shows you the math behind every number with live-rendered formulas.
 
-**The ideas, layout, and design are all mine.** The coding was done with the help of Antigravity. Every feature, every toggle, every decision came from my head. The AI just made it happen faster.
+**The ideas, layout, and design are all mine.** The coding was done with the help of Antigravity. Every feature, every toggle, every "make the labels crisper" decision came from my head. The AI just made it happen faster.
 
 ---
 
@@ -74,7 +74,7 @@ Yep. Drag your finger across the chart to explore, tap to pin. The layout flips 
 
 ## 🚀 How to Run It
 
-Just Double-click and go.
+Just open `index.html`. That's it. No `npm install`, no webpack, no 47 config files. Double-click and go.
 
 The only external things it loads (via CDN) are [KaTeX](https://katex.org/) for pretty math and a couple of [Google Fonts](https://fonts.google.com/).
 

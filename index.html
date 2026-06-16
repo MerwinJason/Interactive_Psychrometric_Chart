@@ -113,6 +113,7 @@
             <div class="tab-bar">
                 <button class="tab-btn active" data-tab="properties">Air Properties</button>
                 <button class="tab-btn" data-tab="formulas">Formulas</button>
+                <button class="tab-btn" data-tab="processes">Processes</button>
             </div>
 
             <!-- Tab: Properties -->
@@ -228,6 +229,21 @@
                         <div class="f-label">Wet Bulb</div>
                         <div class="f-math" id="f-twb"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Tab: Processes -->
+            <div class="tab-content" id="tab-processes">
+                <div class="panel-section process-toolbar">
+                    <button class="process-add-btn" id="add-process-btn">＋ Add Process</button>
+                    <button class="process-cancel-btn" id="cancel-process-btn">✕ Cancel</button>
+                    <button class="process-snap-toggle active" id="snap-toggle" title="Snap to existing points">🧲 Snap</button>
+                    <button class="process-move-btn" id="move-selected-btn" title="Drag to move selected processes">⤡ Move</button>
+                    <div class="process-status" id="process-status"></div>
+                </div>
+                <div class="panel-section process-list-section">
+                    <div id="process-list"></div>
+                    <div class="process-empty" id="process-empty">No processes added. Click ＋ to define a process between two state points.</div>
                 </div>
             </div>
         </aside>

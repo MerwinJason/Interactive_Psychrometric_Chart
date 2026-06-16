@@ -43,6 +43,10 @@ class PsychroChart {
         // Show value labels on crosshair
         this.showLabels = true;
 
+        // Process lines data (set from app.js)
+        this.processes = [];
+        this.addModePointA = null;  // { tdb, w } during add mode
+
         this.resize();
     }
 
@@ -334,6 +338,11 @@ class PsychroChart {
     drawDynamic(tdb, w, props) {
         const ctx = this.dctx;
         ctx.clearRect(0, 0, this.W, this.H);
+
+        // --- Draw process lines (always, even without crosshair) ---
+        this._drawProcessLines(ctx);
+        this._drawAddModePoint(ctx);
+
         if (tdb === null || w === null || !props) return;
         if (!Psychro.isValid(tdb, w)) return;
 
@@ -382,6 +391,144 @@ class PsychroChart {
         if (this.showLabels) {
             this._drawValueLabels(ctx, mx, my, tdb, w, props);
         }
+    }
+
+    /* ---- Process line rendering ---- */
+    _drawProcessLines(ctx) {
+        if (!this.processes || this.processes.length === 0) return;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.pad.left, this.pad.top, this.chartW, this.chartH);
+        ctx.clip();
+
+        for (const proc of this.processes) {
+            const ax = this.tdbToX(proc.pointA.tdb);
+            const ay = this.wToY(proc.pointA.w);
+            const bx = this.tdbToX(proc.pointB.tdb);
+            const by = this.wToY(proc.pointB.w);
+            const color = proc.color;
+
+            // Line A → B
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+
+            // Arrowhead at B
+            const angle = Math.atan2(by - ay, bx - ax);
+            const headLen = 10;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(bx - headLen * Math.cos(angle - Math.PI / 7), by - headLen * Math.sin(angle - Math.PI / 7));
+            ctx.lineTo(bx - headLen * Math.cos(angle + Math.PI / 7), by - headLen * Math.sin(angle + Math.PI / 7));
+            ctx.closePath();
+            ctx.fill();
+
+            // Dots at A and B with data labels
+            const pointsData = [
+                { x: ax, y: ay, label: 'A', tdb: proc.pointA.tdb, w: proc.pointA.w },
+                { x: bx, y: by, label: 'B', tdb: proc.pointB.tdb, w: proc.pointB.w }
+            ];
+            pointsData.forEach(pt => {
+                // Filled circle
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = this.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Data label above the dot
+                const dispT = this.toDisplayTemp(pt.tdb).toFixed(1);
+                const dispW = (pt.w * 1000).toFixed(1);
+                const labelText = `${pt.label}: ${dispT}${this.tempUnit()}, ${dispW} g/kg`;
+
+                ctx.font = "500 8px 'JetBrains Mono', monospace";
+                const metrics = ctx.measureText(labelText);
+                const tw = metrics.width;
+                const th = 11;
+                const px = 4, py = 2;
+                const bw = tw + px * 2;
+                const bh = th + py * 2;
+
+                // Position above the dot, centered
+                let lx = pt.x - bw / 2;
+                let ly = pt.y - 16 - bh;
+
+                // Clamp to chart bounds
+                lx = Math.max(this.pad.left + 2, Math.min(lx, this.pad.left + this.chartW - bw - 2));
+                ly = Math.max(this.pad.top + 2, Math.min(ly, this.pad.top + this.chartH - bh - 2));
+
+                // Background pill
+                ctx.fillStyle = this.colors.labelBg;
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(lx, ly, bw, bh, 3);
+                } else {
+                    ctx.rect(lx, ly, bw, bh);
+                }
+                ctx.fill();
+
+                // Border in process color
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 0.8;
+                ctx.stroke();
+
+                // Text in process color
+                ctx.fillStyle = color;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(labelText, lx + px, ly + bh / 2);
+            });
+        }
+
+        ctx.restore();
+    }
+
+    /* ---- Pending Point A indicator during add mode ---- */
+    _drawAddModePoint(ctx) {
+        if (!this.addModePointA) return;
+
+        const x = this.tdbToX(this.addModePointA.tdb);
+        const y = this.wToY(this.addModePointA.w);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.pad.left, this.pad.top, this.chartW, this.chartH);
+        ctx.clip();
+
+        // Pulsing outer ring
+        ctx.strokeStyle = '#3fb950';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(x, y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Solid inner dot
+        ctx.fillStyle = '#3fb950';
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = this.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Label
+        ctx.font = '600 9px Inter, sans-serif';
+        ctx.fillStyle = '#3fb950';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('A', x, y - 14);
+
+        ctx.restore();
     }
 
     /* ---- Value labels drawn on/near the crosshair lines ---- */

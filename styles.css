@@ -607,6 +607,290 @@ main {
     box-shadow: 0 4px 14px rgba(0,0,0,0.25);
 }
 
+/* ---------- Processes tab ---------- */
+.process-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+}
+.process-add-btn {
+    padding: 7px 16px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-4));
+    border: none;
+    border-radius: 7px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    letter-spacing: 0.3px;
+}
+.process-add-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+}
+.process-add-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+.process-cancel-btn {
+    display: none;
+    padding: 7px 14px;
+    background: transparent;
+    border: 1px solid var(--accent-3);
+    border-radius: 7px;
+    color: var(--accent-3);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.process-cancel-btn:hover {
+    background: rgba(248,81,73,0.08);
+}
+.process-cancel-btn.visible {
+    display: inline-flex;
+}
+.process-status {
+    display: none;
+    width: 100%;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent-2);
+    padding: 6px 10px;
+    background: rgba(63,185,80,0.08);
+    border-radius: 6px;
+    border: 1px solid rgba(63,185,80,0.2);
+    margin-top: 2px;
+    animation: statusPulse 2s ease-in-out infinite;
+}
+.process-status.visible {
+    display: block;
+}
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Snap toggle */
+.process-snap-toggle {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+.process-snap-toggle:hover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+.process-snap-toggle.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+
+/* Move selected button */
+.process-move-btn {
+    display: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-2);
+    background: transparent;
+    color: var(--accent-2);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.process-move-btn.visible {
+    display: inline-flex;
+}
+.process-move-btn:hover {
+    background: rgba(63,185,80,0.08);
+}
+.process-move-btn.active {
+    background: var(--accent-2);
+    color: #fff;
+}
+
+/* Process card selection */
+.process-select-cb {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.process-card.selected {
+    border-color: var(--accent);
+    box-shadow: inset 3px 0 0 var(--accent), var(--shadow-sm);
+}
+
+.process-list-section {
+    padding: 8px 14px;
+}
+
+/* Process card */
+.process-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    margin-bottom: 10px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.process-card:hover {
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Card header: swatch + type + delete */
+.process-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.process-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.process-type {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+    letter-spacing: 0.2px;
+}
+.process-delete-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+.process-delete-btn:hover {
+    color: var(--accent-3);
+    background: rgba(248,81,73,0.08);
+    border-color: var(--accent-3);
+}
+
+/* Point block (A or B) */
+.process-point-block {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+}
+.process-pt-header {
+    font-size: 11px;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 14px;
+    padding-top: 4px;
+}
+.process-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 3px 6px;
+    flex: 1;
+}
+.process-field {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.process-field-label {
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 18px;
+    letter-spacing: 0.3px;
+}
+.process-field-unit {
+    font-size: 7px;
+    color: var(--text-muted);
+}
+.process-input {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    width: 42px;
+    text-align: right;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--input-border);
+    border-radius: 3px;
+    padding: 2px 3px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    appearance: textfield;
+}
+.process-input::-webkit-outer-spin-button,
+.process-input::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+}
+.process-input:focus {
+    border-color: var(--input-focus);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* Arrow separator between A and B */
+.process-arrow-sep {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1;
+    padding: 0 0 0 14px;
+}
+
+.process-deltas {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    padding-left: 20px;
+}
+
+/* Empty placeholder */
+.process-empty {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 24px 16px;
+    line-height: 1.6;
+    font-style: italic;
+}
+.process-empty.hidden {
+    display: none;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
     #side-panel { width: 250px; }
@@ -637,4 +921,6 @@ main {
     .val-row { padding: 6px 8px; }
     .step-btn { width: 20px; height: 16px; font-size: 8px; }
     .val-input { width: 56px; font-size: 11px; }
+    .process-add-btn { padding: 6px 12px; font-size: 11px; }
+    .process-cancel-btn { padding: 6px 10px; font-size: 11px; }
 }
