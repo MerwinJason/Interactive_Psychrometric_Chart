@@ -43,6 +43,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let useFahrenheit = false;
     let showLabels = true;
 
+    // Zoom/pan state
+    let isPanning = false;
+    let wasPanning = false;
+    let panStartX = 0, panStartY = 0;
+    let panOrigView = null;
+
     // Line visibility
     const lineVisible = { rh: true, twb: true, enth: true, vol: true };
 
@@ -70,6 +76,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const processEmptyEl   = document.getElementById('process-empty');
     const snapToggleBtn    = document.getElementById('snap-toggle');
     const moveSelectedBtn  = document.getElementById('move-selected-btn');
+
+    // ---- AHU Sequence state ----
+    let ahuMode = false;
+    const ahuChain = {
+        oa: null, // { tdb, w }
+        ra: null,
+        mixRatio: 0.2,
+        stages: []
+    };
+    let ahuAddMode = null; // 'oa', 'ra', or 'stage'
+    let stageIdCounter = 0;
+
+    // AHU UI DOM refs
+    const modeFreeformBtn = document.getElementById('mode-freeform-btn');
+    const modeAhuBtn      = document.getElementById('mode-ahu-btn');
+    const freeformContainer = document.getElementById('freeform-container');
+    const ahuContainer    = document.getElementById('ahu-container');
+    
+    const ahuSetOaBtn     = document.getElementById('ahu-set-oa-btn');
+    const ahuSetRaBtn     = document.getElementById('ahu-set-ra-btn');
+    const ahuCancelBtn    = document.getElementById('ahu-cancel-btn');
+    const ahuStatus       = document.getElementById('ahu-status');
+    const ahuSystemBlock  = document.getElementById('ahu-system-block');
+    const ahuAddStageBtn  = document.getElementById('ahu-add-stage-btn');
+    const ahuStageList    = document.getElementById('ahu-stage-list');
+    const ahuSummaryFooter = document.getElementById('ahu-summary-footer');
+    const ahuNetDh        = document.getElementById('ahu-net-dh');
+    const ahuTotalDh      = document.getElementById('ahu-total-dh');
 
     /* ---- Unit conversion helpers ---- */
     function toF(c) { return c * 9 / 5 + 32; }
@@ -105,11 +139,50 @@ document.addEventListener('DOMContentLoaded', () => {
         unitTdp.textContent = tempUnit();
         unitCBtn.classList.toggle('active', !useFahrenheit);
         unitFBtn.classList.toggle('active', useFahrenheit);
+        
+        // Update elevation input display
+        const elevInput = document.getElementById('elevation-input');
+        const elevUnit = document.getElementById('elevation-unit');
+        if (elevInput && elevUnit) {
+            elevUnit.textContent = useFahrenheit ? 'ft' : 'm';
+            elevInput.step = useFahrenheit ? '500' : '100';
+            elevInput.value = useFahrenheit 
+                ? Math.round(currentElevationM * 3.28084) 
+                : Math.round(currentElevationM);
+        }
         if (lastProps) {
             updateAllInputs(lastProps);
             chart.drawDynamic(lastProps.Tdb, lastProps.W, lastProps);
         }
         renderProcessList();
+    }
+
+    /* ---- Elevation handling ---- */
+    let currentElevationM = 0;
+    const elevInput = document.getElementById('elevation-input');
+    if (elevInput) {
+        elevInput.addEventListener('change', () => {
+            let val = parseFloat(elevInput.value);
+            if (isNaN(val)) val = 0;
+            
+            // Convert to meters if currently in F/feet mode
+            if (useFahrenheit) {
+                currentElevationM = val * 0.3048;
+            } else {
+                currentElevationM = val;
+            }
+            
+            Psychro.setAltitude(currentElevationM);
+            
+            // Update all data/UI
+            if (lastProps && pinnedPoint) {
+                lastProps = Psychro.allProps(pinnedPoint.tdb, pinnedPoint.w);
+            }
+            fullRedraw();
+            if (lastProps) updateAllInputs(lastProps);
+            renderProcessList();
+            if (ahuMode) syncAhuToChart();
+        });
     }
 
     unitCBtn.addEventListener('click', () => {
@@ -164,6 +237,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 80);
     });
 
+    /* ---- Zoom/Pan controls ---- */
+    function fullRedraw() {
+        chart.drawStatic();
+        if (pinnedPoint && lastProps) {
+            chart.drawDynamic(pinnedPoint.tdb, pinnedPoint.w, lastProps);
+        } else {
+            chart.drawDynamic(null, null, null);
+        }
+    }
+
+    function updateZoomBadge() {
+        const zoomLevel = chart.getZoomLevel();
+        const isDefault = chart.isDefaultZoom();
+        const badge = document.getElementById('zoom-badge');
+        const resetBtn = document.getElementById('zoom-reset-btn');
+        if (!badge || !resetBtn) return;
+        if (isDefault) {
+            badge.classList.remove('visible');
+            resetBtn.style.display = 'none';
+        } else {
+            badge.textContent = zoomLevel.toFixed(1) + '\u00d7';
+            badge.classList.add('visible');
+            resetBtn.style.display = 'flex';
+        }
+    }
+
+    document.getElementById('zoom-reset-btn').addEventListener('click', () => {
+        chart.resetZoom();
+        fullRedraw();
+        updateZoomBadge();
+    });
+
     /* ---- Tutorial (always show on open) ---- */
     tutorialOverlay.classList.add('visible');
 
@@ -182,6 +287,40 @@ document.addEventListener('DOMContentLoaded', () => {
             if (target) target.classList.add('active');
         });
     });
+
+    /* ---- Mode Toggle ---- */
+    function setAhuMode(enable) {
+        ahuMode = enable;
+        modeFreeformBtn.classList.toggle('active', !enable);
+        modeAhuBtn.classList.toggle('active', enable);
+        
+        freeformContainer.style.display = enable ? 'none' : 'block';
+        ahuContainer.style.display = enable ? 'block' : 'none';
+        
+        // Reset any active add states
+        if (addProcessMode) {
+            addProcessMode = false;
+            pendingPointA = null;
+            addProcessBtn.style.display = 'inline-block';
+            cancelProcessBtn.classList.remove('visible');
+            processStatus.classList.remove('visible');
+        }
+        if (ahuAddMode) {
+            setAhuAddMode(null);
+        }
+        
+        chart.ahuMode = ahuMode; // tell chart which layer to draw
+        
+        // Force redraw to swap lines
+        if (pinnedPoint && lastProps) {
+            chart.drawDynamic(pinnedPoint.tdb, pinnedPoint.w, lastProps);
+        } else {
+            chart.drawDynamic(null, null, null);
+        }
+    }
+    
+    modeFreeformBtn.addEventListener('click', () => setAhuMode(false));
+    modeAhuBtn.addEventListener('click', () => setAhuMode(true));
 
     /* ---- Pin / Unpin ---- */
     pinBadge.addEventListener('click', () => { unpin(); });
@@ -223,6 +362,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Mouse interaction ---- */
     dynamicCanvas.addEventListener('mousemove', (e) => {
+        // Pan drag
+        if (isPanning) {
+            const dx = e.clientX - panStartX;
+            const dy = e.clientY - panStartY;
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) wasPanning = true;
+            const tdbRange = panOrigView.tdbMax - panOrigView.tdbMin;
+            const wRange = panOrigView.wMax - panOrigView.wMin;
+            chart.viewTdbMin = panOrigView.tdbMin - dx / chart.chartW * tdbRange;
+            chart.viewTdbMax = panOrigView.tdbMax - dx / chart.chartW * tdbRange;
+            chart.viewWMin = panOrigView.wMin + dy / chart.chartH * wRange;
+            chart.viewWMax = panOrigView.wMax + dy / chart.chartH * wRange;
+            chart._clampView();
+            fullRedraw();
+            updateZoomBadge();
+            return;
+        }
+
         // Handle move-mode drag
         if (moveMode && moveDragStart) {
             const hit = chart.hitTest(e.clientX, e.clientY);
@@ -267,8 +423,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Move mode: mousedown to start drag
+    // Move mode + Pan: mousedown to start drag
     dynamicCanvas.addEventListener('mousedown', (e) => {
+        // Pan: middle button or Ctrl/Cmd+left
+        if (e.button === 1 || (e.button === 0 && (e.ctrlKey || e.metaKey))) {
+            isPanning = true;
+            wasPanning = false;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            panOrigView = {
+                tdbMin: chart.viewTdbMin, tdbMax: chart.viewTdbMax,
+                wMin: chart.viewWMin, wMax: chart.viewWMax
+            };
+            dynamicCanvas.style.cursor = 'grabbing';
+            e.preventDefault();
+            return;
+        }
         if (!moveMode || selectedSet.size === 0) return;
         const hit = chart.hitTest(e.clientX, e.clientY);
         if (!hit) return;
@@ -285,8 +455,13 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
     });
 
-    // Move mode: mouseup to finish drag
+    // Move mode + Pan: mouseup to finish drag
     dynamicCanvas.addEventListener('mouseup', (e) => {
+        if (isPanning) {
+            isPanning = false;
+            dynamicCanvas.style.cursor = moveMode ? 'move' : 'crosshair';
+            return;
+        }
         if (moveMode && moveDragStart) {
             moveDragStart = null;
             moveOriginals = null;
@@ -295,11 +470,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     dynamicCanvas.addEventListener('click', (e) => {
+        // ---- Swallow click after pan ----
+        if (wasPanning) { wasPanning = false; return; }
         // ---- Move mode: swallow clicks ----
         if (moveMode) return;
         // ---- Add-process mode intercept ----
         if (addProcessMode) {
             handleProcessClick(e.clientX, e.clientY);
+            return;
+        }
+        // ---- AHU mode intercept ----
+        if (ahuAddMode) {
+            handleAhuClick(e.clientX, e.clientY);
             return;
         }
         const hit = chart.hitTest(e.clientX, e.clientY);
@@ -316,16 +498,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     dynamicCanvas.addEventListener('mouseleave', () => {
         if (pinnedPoint) return;
+        if (isPanning) return;
         chart.drawDynamic(null, null, null);
         clearValues();
     });
 
     dynamicCanvas.style.cursor = 'crosshair';
 
+    // Prevent context menu on chart
+    dynamicCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Wheel zoom
+    dynamicCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const hit = chart.hitTestRaw(e.clientX, e.clientY);
+        if (!hit) return;
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        chart.zoomAt(hit.tdb, hit.w, factor);
+        fullRedraw();
+        updateZoomBadge();
+    }, { passive: false });
+
+    // End pan if mouse released outside canvas
+    window.addEventListener('mouseup', () => {
+        if (isPanning) {
+            isPanning = false;
+            dynamicCanvas.style.cursor = moveMode ? 'move' : 'crosshair';
+        }
+    });
+
     /* ---- Touch interaction (mobile) ---- */
     let touchStartPos = null;
+    let isPinching = false;
+    let pinchStartDist = 0;
+    let pinchStartView = null;
+    let pinchStartCenter = null;
 
     dynamicCanvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            isPinching = true;
+            const t1 = e.touches[0], t2 = e.touches[1];
+            pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+            pinchStartView = {
+                tdbMin: chart.viewTdbMin, tdbMax: chart.viewTdbMax,
+                wMin: chart.viewWMin, wMax: chart.viewWMax
+            };
+            pinchStartCenter = {
+                x: (t1.clientX + t2.clientX) / 2,
+                y: (t1.clientY + t2.clientY) / 2
+            };
+            return;
+        }
+
         e.preventDefault();
         const touch = e.touches[0];
         touchStartPos = { x: touch.clientX, y: touch.clientY };
@@ -344,6 +569,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: false });
 
     dynamicCanvas.addEventListener('touchmove', (e) => {
+        if (isPinching && e.touches.length === 2) {
+            e.preventDefault();
+            const t1 = e.touches[0], t2 = e.touches[1];
+            const newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+            const factor = newDist / pinchStartDist;
+
+            // Restore original view then zoom
+            chart.viewTdbMin = pinchStartView.tdbMin;
+            chart.viewTdbMax = pinchStartView.tdbMax;
+            chart.viewWMin = pinchStartView.wMin;
+            chart.viewWMax = pinchStartView.wMax;
+
+            const rect = dynamicCanvas.getBoundingClientRect();
+            const centerTdb = chart.xToTdb(pinchStartCenter.x - rect.left);
+            const centerW = chart.yToW(pinchStartCenter.y - rect.top);
+            chart.zoomAt(centerTdb, centerW, factor);
+
+            // Pan: keep pinch center under fingers
+            const newCenterX = (t1.clientX + t2.clientX) / 2;
+            const newCenterY = (t1.clientY + t2.clientY) / 2;
+            const panDx = newCenterX - pinchStartCenter.x;
+            const panDy = newCenterY - pinchStartCenter.y;
+            const tdbRange = chart.viewTdbMax - chart.viewTdbMin;
+            const wRange = chart.viewWMax - chart.viewWMin;
+            chart.viewTdbMin -= panDx / chart.chartW * tdbRange;
+            chart.viewTdbMax -= panDx / chart.chartW * tdbRange;
+            chart.viewWMin += panDy / chart.chartH * wRange;
+            chart.viewWMax += panDy / chart.chartH * wRange;
+            chart._clampView();
+
+            fullRedraw();
+            updateZoomBadge();
+            return;
+        }
+
         e.preventDefault();
         touchStartPos = null; // mark as drag, not tap
         if (pinnedPoint) return;
@@ -360,10 +620,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: false });
 
     dynamicCanvas.addEventListener('touchend', (e) => {
+        if (isPinching) {
+            isPinching = false;
+            return;
+        }
         if (touchStartPos) {
             // Was a tap (no drag)
             if (addProcessMode) {
                 handleProcessClick(touchStartPos.x, touchStartPos.y);
+            } else if (ahuAddMode) {
+                handleAhuClick(touchStartPos.x, touchStartPos.y);
             } else {
                 // Pin the point
                 const hit = chart.hitTest(touchStartPos.x, touchStartPos.y);
@@ -731,6 +997,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="process-field-unit">${unit}</span>
                     </div>
                     <div class="process-field">
+                        <span class="process-field-label">Tdp</span>
+                        <input type="number" class="process-input" data-proc="${idx}" data-point="${pointKey}" data-field="tdp"
+                               value="${displayTemp(props.Tdp).toFixed(1)}" step="0.1">
+                        <span class="process-field-unit">${unit}</span>
+                    </div>
+                    <div class="process-field">
                         <span class="process-field-label">W</span>
                         <input type="number" class="process-input" data-proc="${idx}" data-point="${pointKey}" data-field="w"
                                value="${(point.w * 1000).toFixed(2)}" step="0.1">
@@ -756,6 +1028,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'tdb': inp.value = displayTemp(point.tdb).toFixed(1); break;
                 case 'rh':  inp.value = (props.RH * 100).toFixed(1); break;
                 case 'twb': inp.value = displayTemp(props.Twb).toFixed(1); break;
+                case 'tdp': inp.value = displayTemp(props.Tdp).toFixed(1); break;
                 case 'w':   inp.value = (point.w * 1000).toFixed(2); break;
                 case 'h':   inp.value = props.h.toFixed(1); break;
             }
@@ -999,9 +1272,325 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape') {
             if (addProcessMode) exitAddMode();
             if (moveMode) exitMoveMode();
+            if (ahuAddMode) setAhuAddMode(null);
+        }
+        // Reset zoom on Home key
+        if (e.key === 'Home' && document.activeElement.tagName !== 'INPUT') {
+            if (!chart.isDefaultZoom()) {
+                chart.resetZoom();
+                fullRedraw();
+                updateZoomBadge();
+            }
         }
     });
 
     // Initial render
     renderProcessList();
+
+    /* ==========================================================
+       AHU SEQUENCE MODE LOGIC
+       ========================================================== */
+
+    function getMA() {
+        if (!ahuChain.oa || !ahuChain.ra) return null;
+        
+        const r = ahuChain.mixRatio;
+        const wOA = ahuChain.oa.w;
+        const wRA = ahuChain.ra.w;
+        const hOA = Psychro.enthalpy(ahuChain.oa.tdb, wOA);
+        const hRA = Psychro.enthalpy(ahuChain.ra.tdb, wRA);
+        
+        const wMA = r * wOA + (1 - r) * wRA;
+        const hMA = r * hOA + (1 - r) * hRA;
+        
+        // Inverse of h = 1.006 * Tdb + W * (2501 + 1.86 * Tdb)
+        // h - 2501 * W = Tdb * (1.006 + 1.86 * W)
+        const tdbMA = (hMA - 2501 * wMA) / (1.006 + 1.86 * wMA);
+        
+        if (!Psychro.isValid(tdbMA, wMA)) return null; // Safety check
+        return { tdb: tdbMA, w: wMA };
+    }
+
+    function syncAhuToChart() {
+        chart.ahuChain = ahuChain;
+        chart.ahuMA = getMA();
+        if (pinnedPoint && lastProps) {
+            chart.drawDynamic(pinnedPoint.tdb, pinnedPoint.w, lastProps);
+        } else {
+            chart.drawDynamic(null, null, null);
+        }
+        renderAhuSidebar();
+    }
+
+    function setAhuAddMode(mode) {
+        ahuAddMode = mode;
+        if (mode) {
+            ahuSetOaBtn.style.display = 'none';
+            ahuSetRaBtn.style.display = 'none';
+            ahuAddStageBtn.style.display = 'none';
+            ahuCancelBtn.classList.add('visible');
+            ahuStatus.classList.add('visible');
+            
+            if (mode === 'oa') ahuStatus.textContent = 'Click chart to set Outdoor Air point...';
+            else if (mode === 'ra') ahuStatus.textContent = 'Click chart to set Return Air point...';
+            else if (mode === 'stage') ahuStatus.textContent = 'Click chart to set Stage Exit point...';
+            
+            chart.addModePointA = null; // Don't use the green pulsing dot for AHU mode
+        } else {
+            ahuSetOaBtn.style.display = 'inline-block';
+            ahuSetRaBtn.style.display = 'inline-block';
+            ahuAddStageBtn.style.display = 'inline-block';
+            ahuCancelBtn.classList.remove('visible');
+            ahuStatus.classList.remove('visible');
+        }
+    }
+
+    ahuSetOaBtn.addEventListener('click', () => setAhuAddMode('oa'));
+    ahuSetRaBtn.addEventListener('click', () => setAhuAddMode('ra'));
+    ahuCancelBtn.addEventListener('click', () => setAhuAddMode(null));
+    ahuAddStageBtn.addEventListener('click', () => {
+        if (!ahuChain.oa || !ahuChain.ra) return;
+        setAhuAddMode('stage');
+    });
+
+    function handleAhuClick(clientX, clientY) {
+        const hit = chart.hitTest(clientX, clientY);
+        if (!hit) return;
+        
+        const pt = { tdb: hit.tdb, w: hit.w };
+        
+        if (ahuAddMode === 'oa') {
+            ahuChain.oa = pt;
+        } else if (ahuAddMode === 'ra') {
+            ahuChain.ra = pt;
+        } else if (ahuAddMode === 'stage') {
+            const entry = ahuChain.stages.length > 0 
+                ? ahuChain.stages[ahuChain.stages.length - 1].exit 
+                : getMA();
+            
+            const type = detectProcessType(entry, pt);
+            ahuChain.stages.push({
+                id: ++stageIdCounter,
+                label: type,
+                exit: pt
+            });
+        }
+        
+        setAhuAddMode(null);
+        syncAhuToChart();
+    }
+
+    function buildAhuPointEditHTML(pointKey, point, props) {
+        const unit = tempUnit();
+        return `
+            <div class="process-point-block" style="padding-left: 0;">
+                <div class="process-pt-header" style="color:var(--text-primary); font-size:10px; width:22px;">${pointKey}</div>
+                <div class="process-fields-grid">
+                    <div class="process-field">
+                        <span class="process-field-label">Tdb</span>
+                        <input type="number" class="process-input ahu-input" data-point="${pointKey}" data-field="tdb"
+                               value="${displayTemp(point.tdb).toFixed(1)}" step="0.1">
+                        <span class="process-field-unit">${unit}</span>
+                    </div>
+                    <div class="process-field">
+                        <span class="process-field-label">RH</span>
+                        <input type="number" class="process-input ahu-input" data-point="${pointKey}" data-field="rh"
+                               value="${(props.RH * 100).toFixed(1)}" step="0.5">
+                        <span class="process-field-unit">%</span>
+                    </div>
+                    <div class="process-field">
+                        <span class="process-field-label">Twb</span>
+                        <input type="number" class="process-input ahu-input" data-point="${pointKey}" data-field="twb"
+                               value="${displayTemp(props.Twb).toFixed(1)}" step="0.1">
+                        <span class="process-field-unit">${unit}</span>
+                    </div>
+                    <div class="process-field">
+                        <span class="process-field-label">Tdp</span>
+                        <input type="number" class="process-input ahu-input" data-point="${pointKey}" data-field="tdp"
+                               value="${displayTemp(props.Tdp).toFixed(1)}" step="0.1">
+                        <span class="process-field-unit">${unit}</span>
+                    </div>
+                    <div class="process-field">
+                        <span class="process-field-label">W</span>
+                        <input type="number" class="process-input ahu-input" data-point="${pointKey}" data-field="w"
+                               value="${(point.w * 1000).toFixed(2)}" step="0.1">
+                        <span class="process-field-unit">g/kg</span>
+                    </div>
+                    <div class="process-field">
+                        <span class="process-field-label">h</span>
+                        <input type="number" class="process-input ahu-input" data-point="${pointKey}" data-field="h"
+                               value="${props.h.toFixed(1)}" step="0.5">
+                        <span class="process-field-unit">kJ/kg</span>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function renderAhuSidebar() {
+        // 1. System Block (OA / RA / MA)
+        if (!ahuChain.oa && !ahuChain.ra) {
+            ahuSystemBlock.innerHTML = `<div class="process-empty" id="ahu-empty">Set both Outdoor Air and Return Air to begin defining an AHU sequence.</div>`;
+            ahuAddStageBtn.style.display = 'none';
+            ahuStageList.innerHTML = '';
+            ahuSummaryFooter.style.display = 'none';
+            return;
+        }
+
+        let html = '';
+        if (ahuChain.oa) {
+            const pOA = Psychro.allProps(ahuChain.oa.tdb, ahuChain.oa.w);
+            html += buildAhuPointEditHTML('OA', ahuChain.oa, pOA);
+        }
+        if (ahuChain.ra) {
+            if (ahuChain.oa) html += `<div style="height:6px;"></div>`;
+            const pRA = Psychro.allProps(ahuChain.ra.tdb, ahuChain.ra.w);
+            html += buildAhuPointEditHTML('RA', ahuChain.ra, pRA);
+        }
+
+        if (ahuChain.oa && ahuChain.ra) {
+            const ma = getMA();
+            const dispRatio = Math.round(ahuChain.mixRatio * 100);
+            html += `
+                <div class="ahu-mix-slider-wrap">
+                    <div class="ahu-mix-slider-label">
+                        <span>% Outdoor Air (by mass)</span>
+                        <span id="ahu-mix-val">${dispRatio}%</span>
+                    </div>
+                    <input type="range" class="ahu-mix-slider" id="ahu-mix-slider" min="0" max="100" value="${dispRatio}">
+                </div>
+            `;
+            if (ma) {
+                const pMA = Psychro.allProps(ma.tdb, ma.w);
+                html += `<div style="height:6px;"></div>` + buildAhuPointEditHTML('MA', ma, pMA);
+            }
+            ahuAddStageBtn.style.display = 'inline-block';
+            ahuAddStageBtn.disabled = false;
+        } else {
+            ahuAddStageBtn.style.display = 'none';
+        }
+
+        ahuSystemBlock.innerHTML = html;
+
+        // Reattach mix slider listener
+        const slider = document.getElementById('ahu-mix-slider');
+        if (slider) {
+            slider.addEventListener('input', (e) => {
+                ahuChain.mixRatio = e.target.value / 100;
+                document.getElementById('ahu-mix-val').textContent = e.target.value + '%';
+                syncAhuToChart();
+            });
+        }
+
+        // Attach input listeners for OA/RA/MA
+        ahuSystemBlock.querySelectorAll('.ahu-input').forEach(inp => {
+            inp.addEventListener('input', () => {
+                const ptKey = inp.dataset.point; // 'OA', 'RA', 'MA'
+                if (ptKey === 'MA') return; // MA is derived, not editable
+
+                const field = inp.dataset.field;
+                const val = parseFloat(inp.value);
+                if (isNaN(val)) return;
+
+                const pt = ptKey === 'OA' ? ahuChain.oa : ahuChain.ra;
+                const newPt = resolveProcessEdit(pt.tdb, pt.w, field, val);
+                if (newPt) {
+                    if (ptKey === 'OA') ahuChain.oa = newPt;
+                    else ahuChain.ra = newPt;
+                    syncAhuToChart(); // Re-render everything
+                }
+            });
+            // Disable MA inputs
+            if (inp.dataset.point === 'MA') {
+                inp.disabled = true;
+            }
+        });
+
+        // 2. Stage List
+        ahuStageList.innerHTML = '';
+        let totalDh = 0;
+        let entryPoint = getMA();
+
+        ahuChain.stages.forEach((stage, idx) => {
+            if (!entryPoint) return;
+            
+            const pEntry = Psychro.allProps(entryPoint.tdb, entryPoint.w);
+            const pExit = Psychro.allProps(stage.exit.tdb, stage.exit.w);
+            const dH = pExit.h - pEntry.h;
+            const dW = (stage.exit.w - entryPoint.w) * 1000;
+            totalDh += Math.abs(dH);
+
+            const isLast = (idx === ahuChain.stages.length - 1);
+            
+            const card = document.createElement('div');
+            card.className = 'ahu-stage-wrap';
+            
+            let stageHtml = `
+                <div class="ahu-stage-connector"></div>
+                <div class="ahu-stage-card">
+                    <div class="ahu-stage-card-header">
+                        <div class="ahu-stage-badge">${idx + 1}</div>
+                        <input type="text" class="ahu-stage-label-input" value="${stage.label}" data-idx="${idx}">
+                        ${isLast ? `<button class="process-delete-btn ahu-delete-stage" data-idx="${idx}" title="Delete last stage">✕</button>` : ''}
+                    </div>
+                    ${buildAhuPointEditHTML('Exit', stage.exit, pExit)}
+                    <div class="process-deltas" style="padding-left:0;">∆h: ${dH >= 0 ? '+' : ''}${dH.toFixed(1)} kJ/kg  ∆W: ${dW >= 0 ? '+' : ''}${dW.toFixed(1)} g/kg</div>
+                </div>
+            `;
+            card.innerHTML = stageHtml;
+            ahuStageList.appendChild(card);
+
+            entryPoint = stage.exit;
+        });
+
+        // Stage Listeners
+        ahuStageList.querySelectorAll('.ahu-stage-label-input').forEach(inp => {
+            inp.addEventListener('change', (e) => {
+                const idx = parseInt(inp.dataset.idx, 10);
+                ahuChain.stages[idx].label = e.target.value;
+            });
+        });
+
+        ahuStageList.querySelectorAll('.ahu-delete-stage').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                ahuChain.stages.pop(); // Always pop the last one
+                syncAhuToChart();
+            });
+        });
+
+        ahuStageList.querySelectorAll('.ahu-input').forEach(inp => {
+            inp.addEventListener('input', () => {
+                const card = inp.closest('.ahu-stage-card');
+                const labelInp = card.querySelector('.ahu-stage-label-input');
+                const idx = parseInt(labelInp.dataset.idx, 10);
+                
+                const field = inp.dataset.field;
+                const val = parseFloat(inp.value);
+                if (isNaN(val)) return;
+
+                const pt = ahuChain.stages[idx].exit;
+                const newPt = resolveProcessEdit(pt.tdb, pt.w, field, val);
+                if (newPt) {
+                    ahuChain.stages[idx].exit = newPt;
+                    syncAhuToChart();
+                }
+            });
+        });
+
+        // 3. Summary Footer
+        if (ahuChain.stages.length > 0 && getMA()) {
+            ahuSummaryFooter.style.display = 'block';
+            
+            const pMA = Psychro.allProps(getMA().tdb, getMA().w);
+            const finalExit = ahuChain.stages[ahuChain.stages.length - 1].exit;
+            const pFinal = Psychro.allProps(finalExit.tdb, finalExit.w);
+            
+            const pOA = Psychro.allProps(ahuChain.oa.tdb, ahuChain.oa.w);
+            const netDh = pFinal.h - pOA.h;
+            
+            ahuNetDh.textContent = (netDh > 0 ? '+' : '') + netDh.toFixed(1);
+            ahuTotalDh.textContent = totalDh.toFixed(1);
+        } else {
+            ahuSummaryFooter.style.display = 'none';
+        }
+    }
 });

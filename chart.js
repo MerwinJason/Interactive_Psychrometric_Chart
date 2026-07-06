@@ -15,6 +15,12 @@ class PsychroChart {
         this.tdbMin = 0; this.tdbMax = 55;
         this.wMin = 0;   this.wMax = 0.030; // kg/kg
 
+        // View bounds (visible range — changes with zoom/pan)
+        this.viewTdbMin = this.tdbMin;
+        this.viewTdbMax = this.tdbMax;
+        this.viewWMin = this.wMin;
+        this.viewWMax = this.wMax;
+
         // Padding
         this.pad = { top: 40, right: 70, bottom: 50, left: 50 };
 
@@ -82,11 +88,127 @@ class PsychroChart {
         this.chartH = h - this.pad.top - this.pad.bottom;
     }
 
-    /* ---- Coordinate transforms (always SI internally) ---- */
-    tdbToX(t) { return this.pad.left + (t - this.tdbMin) / (this.tdbMax - this.tdbMin) * this.chartW; }
-    wToY(w)   { return this.pad.top + this.chartH - (w - this.wMin) / (this.wMax - this.wMin) * this.chartH; }
-    xToTdb(x) { return this.tdbMin + (x - this.pad.left) / this.chartW * (this.tdbMax - this.tdbMin); }
-    yToW(y)   { return this.wMin + (this.pad.top + this.chartH - y) / this.chartH * (this.wMax - this.wMin); }
+    /* ---- Coordinate transforms (use view bounds for zoom/pan) ---- */
+    tdbToX(t) { return this.pad.left + (t - this.viewTdbMin) / (this.viewTdbMax - this.viewTdbMin) * this.chartW; }
+    wToY(w)   { return this.pad.top + this.chartH - (w - this.viewWMin) / (this.viewWMax - this.viewWMin) * this.chartH; }
+    xToTdb(x) { return this.viewTdbMin + (x - this.pad.left) / this.chartW * (this.viewTdbMax - this.viewTdbMin); }
+    yToW(y)   { return this.viewWMin + (this.pad.top + this.chartH - y) / this.chartH * (this.viewWMax - this.viewWMin); }
+
+    /* ---- Zoom / Pan methods ---- */
+    zoomAt(tdbCenter, wCenter, factor) {
+        const oldTdbRange = this.viewTdbMax - this.viewTdbMin;
+        const oldWRange = this.viewWMax - this.viewWMin;
+        const newTdbRange = oldTdbRange / factor;
+        const newWRange = oldWRange / factor;
+        const tdbFrac = (tdbCenter - this.viewTdbMin) / oldTdbRange;
+        const wFrac = (wCenter - this.viewWMin) / oldWRange;
+        this.viewTdbMin = tdbCenter - tdbFrac * newTdbRange;
+        this.viewTdbMax = this.viewTdbMin + newTdbRange;
+        this.viewWMin = wCenter - wFrac * newWRange;
+        this.viewWMax = this.viewWMin + newWRange;
+        this._clampView();
+    }
+
+    panTo(newTdbMin, newTdbMax, newWMin, newWMax) {
+        this.viewTdbMin = newTdbMin;
+        this.viewTdbMax = newTdbMax;
+        this.viewWMin = newWMin;
+        this.viewWMax = newWMax;
+        this._clampView();
+    }
+
+    resetZoom() {
+        this.viewTdbMin = this.tdbMin;
+        this.viewTdbMax = this.tdbMax;
+        this.viewWMin = this.wMin;
+        this.viewWMax = this.wMax;
+    }
+
+    getZoomLevel() {
+        const defaultRange = this.tdbMax - this.tdbMin;
+        const currentRange = this.viewTdbMax - this.viewTdbMin;
+        return defaultRange / currentRange;
+    }
+
+    isDefaultZoom() {
+        return Math.abs(this.viewTdbMin - this.tdbMin) < 0.01 &&
+               Math.abs(this.viewTdbMax - this.tdbMax) < 0.01 &&
+               Math.abs(this.viewWMin - this.wMin) < 0.0001 &&
+               Math.abs(this.viewWMax - this.wMax) < 0.0001;
+    }
+
+    _clampView() {
+        let tdbRange = this.viewTdbMax - this.viewTdbMin;
+        let wRange = this.viewWMax - this.viewWMin;
+        const maxTdbRange = this.tdbMax - this.tdbMin;
+        const minTdbRange = 3;
+        const maxWRange = this.wMax - this.wMin;
+        const minWRange = 0.002;
+
+        if (tdbRange < minTdbRange) {
+            const c = (this.viewTdbMin + this.viewTdbMax) / 2;
+            this.viewTdbMin = c - minTdbRange / 2;
+            this.viewTdbMax = c + minTdbRange / 2;
+            tdbRange = minTdbRange;
+        } else if (tdbRange > maxTdbRange) {
+            this.viewTdbMin = this.tdbMin;
+            this.viewTdbMax = this.tdbMax;
+            tdbRange = maxTdbRange;
+        }
+
+        if (wRange < minWRange) {
+            const c = (this.viewWMin + this.viewWMax) / 2;
+            this.viewWMin = c - minWRange / 2;
+            this.viewWMax = c + minWRange / 2;
+            wRange = minWRange;
+        } else if (wRange > maxWRange) {
+            this.viewWMin = this.wMin;
+            this.viewWMax = this.wMax;
+            wRange = maxWRange;
+        }
+
+        // Strictly keep within bounds
+        if (this.viewTdbMin < this.tdbMin) {
+            this.viewTdbMin = this.tdbMin;
+            this.viewTdbMax = this.viewTdbMin + tdbRange;
+        }
+        if (this.viewTdbMax > this.tdbMax) {
+            this.viewTdbMax = this.tdbMax;
+            this.viewTdbMin = this.viewTdbMax - tdbRange;
+        }
+        
+        if (this.viewWMin < this.wMin) {
+            this.viewWMin = this.wMin;
+            this.viewWMax = this.viewWMin + wRange;
+        }
+        if (this.viewWMax > this.wMax) {
+            this.viewWMax = this.wMax;
+            this.viewWMin = this.viewWMax - wRange;
+        }
+    }
+
+    _niceStep(range, targetLines) {
+        if (range <= 0) return 1;
+        const rawStep = range / targetLines;
+        const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+        const res = rawStep / mag;
+        let nice;
+        if (res <= 1.5) nice = 1;
+        else if (res <= 3.5) nice = 2;
+        else if (res <= 7.5) nice = 5;
+        else nice = 10;
+        return nice * mag;
+    }
+
+    /** Hit test without validity check (for zoom/pan at any position) */
+    hitTestRaw(clientX, clientY) {
+        const rect = this.dc.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        if (x < this.pad.left || x > this.pad.left + this.chartW ||
+            y < this.pad.top  || y > this.pad.top + this.chartH) return null;
+        return { tdb: this.xToTdb(x), w: this.yToW(y) };
+    }
 
     setTheme(dark) {
         this.isDark = dark;
@@ -135,11 +257,21 @@ class PsychroChart {
         ctx.fillRect(this.pad.left, this.pad.top, this.chartW, this.chartH);
 
         this._drawGrid(ctx);
+
+        // Clip curves to chart area for clean zoom/pan
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.pad.left, this.pad.top, this.chartW, this.chartH);
+        ctx.clip();
+
         if (this.lineVisible.rh) this._drawRHCurves(ctx);
         if (this.lineVisible.twb) this._drawTwbLines(ctx);
         if (this.lineVisible.enth) this._drawEnthalpyLines(ctx);
         if (this.lineVisible.vol) this._drawVolumeLines(ctx);
         this._drawSatCurve(ctx);
+
+        ctx.restore();
+
         this._drawAxes(ctx);
         this._drawLegend(ctx);
     }
@@ -149,23 +281,62 @@ class PsychroChart {
         ctx.lineWidth = 0.5;
         ctx.font = '10px Inter, sans-serif';
         ctx.fillStyle = this.colors.gridText;
-        ctx.textAlign = 'center';
 
-        // Vertical lines (Tdb)
-        for (let t = this.tdbMin; t <= this.tdbMax; t += 5) {
-            const x = this.tdbToX(t);
+        // Adaptive steps in display units for Tdb
+        const dispMin = this.toDisplayTemp(this.viewTdbMin);
+        const dispMax = this.toDisplayTemp(this.viewTdbMax);
+        const dispRange = dispMax - dispMin;
+        const dispStep = this._niceStep(dispRange, 10);
+        const dispStart = Math.ceil(dispMin / dispStep) * dispStep;
+        const numTdb = Math.ceil((dispMax - dispStart) / dispStep) + 2;
+
+        // Adaptive steps for W (in g/kg)
+        const wMinG = this.viewWMin * 1000;
+        const wMaxG = this.viewWMax * 1000;
+        const wRangeG = wMaxG - wMinG;
+        const wStepG = this._niceStep(wRangeG, 6);
+        const wStartG = Math.ceil(wMinG / wStepG) * wStepG;
+        const numW = Math.ceil((wMaxG - wStartG) / wStepG) + 2;
+
+        // Draw gridlines (clipped to chart area)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.pad.left, this.pad.top, this.chartW, this.chartH);
+        ctx.clip();
+
+        for (let i = 0; i < numTdb; i++) {
+            const dT = dispStart + i * dispStep;
+            if (dT > dispMax + dispStep * 0.5) break;
+            const x = this.tdbToX(this.fromDisplayTemp(dT));
             ctx.beginPath(); ctx.moveTo(x, this.pad.top); ctx.lineTo(x, this.pad.top + this.chartH); ctx.stroke();
-            const displayT = this.toDisplayTemp(t);
-            ctx.fillText(Math.round(displayT) + this.tempUnit(), x, this.pad.top + this.chartH + 16);
+        }
+        for (let i = 0; i < numW; i++) {
+            const wg = wStartG + i * wStepG;
+            if (wg > wMaxG + wStepG * 0.5) break;
+            const y = this.wToY(wg / 1000);
+            ctx.beginPath(); ctx.moveTo(this.pad.left, y); ctx.lineTo(this.pad.left + this.chartW, y); ctx.stroke();
         }
 
-        // Horizontal lines (W)
+        ctx.restore();
+
+        // Draw labels outside clip
+        ctx.textAlign = 'center';
+        for (let i = 0; i < numTdb; i++) {
+            const dT = dispStart + i * dispStep;
+            if (dT > dispMax + dispStep * 0.5) break;
+            const x = this.tdbToX(this.fromDisplayTemp(dT));
+            if (x < this.pad.left - 15 || x > this.pad.left + this.chartW + 15) continue;
+            const label = dispStep < 1 ? dT.toFixed(1) : Math.round(dT).toString();
+            ctx.fillText(label + this.tempUnit(), x, this.pad.top + this.chartH + 16);
+        }
         ctx.textAlign = 'right';
-        for (let wg = 0; wg <= 30; wg += 5) {
-            const w = wg / 1000;
-            const y = this.wToY(w);
-            ctx.beginPath(); ctx.moveTo(this.pad.left, y); ctx.lineTo(this.pad.left + this.chartW, y); ctx.stroke();
-            ctx.fillText(wg.toFixed(0), this.pad.left + this.chartW + 28, y + 3);
+        for (let i = 0; i < numW; i++) {
+            const wg = wStartG + i * wStepG;
+            if (wg > wMaxG + wStepG * 0.5) break;
+            const y = this.wToY(wg / 1000);
+            if (y < this.pad.top - 10 || y > this.pad.top + this.chartH + 10) continue;
+            const dec = wStepG < 1 ? 1 : 0;
+            ctx.fillText(wg.toFixed(dec), this.pad.left + this.chartW + 28, y + 3);
         }
     }
 
@@ -340,7 +511,11 @@ class PsychroChart {
         ctx.clearRect(0, 0, this.W, this.H);
 
         // --- Draw process lines (always, even without crosshair) ---
-        this._drawProcessLines(ctx);
+        if (this.ahuMode) {
+            this._drawAhuChain(ctx);
+        } else {
+            this._drawProcessLines(ctx);
+        }
         this._drawAddModePoint(ctx);
 
         if (tdb === null || w === null || !props) return;
@@ -485,6 +660,136 @@ class PsychroChart {
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(labelText, lx + px, ly + bh / 2);
+            });
+        }
+
+        ctx.restore();
+    }
+
+    /* ---- AHU Chain rendering ---- */
+    _drawAhuChain(ctx) {
+        if (!this.ahuChain) return;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.pad.left, this.pad.top, this.chartW, this.chartH);
+        ctx.clip();
+
+        const color = '#009688';
+
+        // Helper to draw a line with arrow
+        const drawSegment = (ptA, ptB) => {
+            const ax = this.tdbToX(ptA.tdb), ay = this.wToY(ptA.w);
+            const bx = this.tdbToX(ptB.tdb), by = this.wToY(ptB.w);
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+
+            const angle = Math.atan2(by - ay, bx - ax);
+            const headLen = 10;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(bx - headLen * Math.cos(angle - Math.PI / 7), by - headLen * Math.sin(angle - Math.PI / 7));
+            ctx.lineTo(bx - headLen * Math.cos(angle + Math.PI / 7), by - headLen * Math.sin(angle + Math.PI / 7));
+            ctx.closePath();
+            ctx.fill();
+        };
+
+        // Helper to draw a node (badge)
+        const drawNode = (pt, label) => {
+            const px = this.tdbToX(pt.tdb), py = this.wToY(pt.w);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(px, py, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = this.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.font = "600 9px Inter, sans-serif";
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Adjust vertical centering slightly based on font rendering
+            ctx.fillText(label, px, py + 0.5);
+        };
+
+        const drawLabel = (pt, text) => {
+            const px = this.tdbToX(pt.tdb), py = this.wToY(pt.w);
+            const dispT = this.toDisplayTemp(pt.tdb).toFixed(1);
+            const dispW = (pt.w * 1000).toFixed(1);
+            const labelText = `${text}: ${dispT}${this.tempUnit()}, ${dispW} g/kg`;
+            
+            ctx.font = "500 8px 'JetBrains Mono', monospace";
+            const metrics = ctx.measureText(labelText);
+            const tw = metrics.width;
+            const th = 11;
+            const pdx = 4, pdy = 2;
+            const bw = tw + pdx * 2;
+            const bh = th + pdy * 2;
+
+            let lx = px - bw / 2;
+            let ly = py - 18 - bh;
+            
+            lx = Math.max(this.pad.left + 2, Math.min(lx, this.pad.left + this.chartW - bw - 2));
+            ly = Math.max(this.pad.top + 2, Math.min(ly, this.pad.top + this.chartH - bh - 2));
+
+            ctx.fillStyle = this.colors.labelBg;
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(lx, ly, bw, bh, 3);
+            else ctx.rect(lx, ly, bw, bh);
+            ctx.fill();
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+
+            ctx.fillStyle = color;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, lx + pdx, ly + bh / 2);
+        };
+
+        // Draw mixing triangle lines if both OA and RA are present
+        if (this.ahuChain.oa && this.ahuChain.ra && this.ahuMA) {
+            // OA to MA
+            drawSegment(this.ahuChain.oa, this.ahuMA);
+            // RA to MA
+            drawSegment(this.ahuChain.ra, this.ahuMA);
+        }
+
+        // Draw stage lines
+        let entry = this.ahuMA;
+        if (this.ahuChain.stages) {
+            this.ahuChain.stages.forEach(stage => {
+                if (entry) drawSegment(entry, stage.exit);
+                entry = stage.exit;
+            });
+        }
+
+        // Draw nodes over the lines
+        if (this.ahuChain.oa) {
+            drawNode(this.ahuChain.oa, 'O');
+            drawLabel(this.ahuChain.oa, 'OA');
+        }
+        if (this.ahuChain.ra) {
+            drawNode(this.ahuChain.ra, 'R');
+            drawLabel(this.ahuChain.ra, 'RA');
+        }
+        if (this.ahuChain.oa && this.ahuChain.ra && this.ahuMA) {
+            drawNode(this.ahuMA, 'M');
+            drawLabel(this.ahuMA, 'MA');
+        }
+
+        if (this.ahuChain.stages) {
+            this.ahuChain.stages.forEach((stage, idx) => {
+                drawNode(stage.exit, (idx + 1).toString());
+                drawLabel(stage.exit, `Stg ${idx+1}`);
             });
         }
 
@@ -689,7 +994,7 @@ class PsychroChart {
         const pts = [];
         for (let t = this.tdbMin; t <= this.tdbMax; t += 0.5) {
             const TK = t + 273.15;
-            const W = (targetV * Psychro.P_ATM / (287.042 * TK) - 1) / 1.6078;
+            const W = (targetV * Psychro.getPATM() / (287.042 * TK) - 1) / 1.6078;
             if (W < this.wMin || W > this.wMax) continue;
             if (W > Psychro.satHumidityRatio(t) * 1.001) continue;
             pts.push({ x: this.tdbToX(t), y: this.wToY(W) });

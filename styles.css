@@ -126,6 +126,35 @@ header {
     flex-shrink: 0;
 }
 
+.elevation-group {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 8px;
+    height: 28px;
+}
+.elevation-input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    width: 45px;
+    outline: none;
+    text-align: right;
+    padding: 0;
+}
+.elevation-input::-webkit-outer-spin-button,
+.elevation-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.elevation-unit {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-left: 2px;
+}
+
 .icon-btn {
     width: 28px; height: 28px;
     border-radius: 6px;
@@ -487,6 +516,25 @@ main {
     background: rgba(212,136,14,0.2);
 }
 .pin-badge.visible {
+    display: inline-flex;
+}
+
+/* ---------- Zoom controls ---------- */
+.zoom-badge {
+    display: none;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--accent-glow);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    user-select: none;
+    letter-spacing: 0.5px;
+}
+.zoom-badge.visible {
     display: inline-flex;
 }
 
@@ -890,6 +938,95 @@ main {
 .process-empty.hidden {
     display: none;
 }
+
+/* ---------- AHU Sequence Mode ---------- */
+
+.process-mode-toggle {
+    width: 100%;
+}
+.process-mode-toggle .unit-toggle-btn {
+    flex: 1;
+    text-align: center;
+}
+
+.ahu-system-block {
+    margin-bottom: 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+
+.ahu-mix-slider-wrap {
+    margin: 12px 0 6px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ahu-mix-slider-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+}
+.ahu-mix-slider {
+    width: 100%;
+    accent-color: #009688;
+}
+
+.ahu-stage-connector {
+    width: 2px;
+    height: 16px;
+    background: var(--border);
+    margin: 0 auto;
+}
+
+.ahu-stage-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    position: relative;
+}
+.ahu-stage-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ahu-stage-badge {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #009688;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.ahu-stage-label-input {
+    flex: 1;
+    background: transparent;
+    border: 1px dashed transparent;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.ahu-stage-label-input:hover, .ahu-stage-label-input:focus {
+    border-color: var(--border);
+    background: var(--input-bg);
+    outline: none;
+}
+
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {

@@ -8,7 +8,7 @@ I've always found psychrometric charts irritating to read manually (yes, I'm tha
 
 ---
 
-## What Can It Do (As explained by Claude)?
+## What Can It Do ?(As explained by Claude.)
 
 ### 📐 The Chart
 - **Dual-canvas rendering** — silky smooth crosshair on top of a static grid
@@ -31,8 +31,7 @@ I've always found psychrometric charts irritating to read manually (yes, I'm tha
 
 ### 📝 Live Formulas
 - **8 equations rendered with KaTeX** — updating in real time with your actual values
-- They live in their own tab so they have room to breathe — no scrollbars, no cramped math
-
+- They live in their own tab so they have room to breathe
 ---
 
 ## 🧮 The Math
@@ -82,8 +81,8 @@ The only external things it loads (via CDN) are [KaTeX](https://katex.org/) for 
 
 ## 📄 License
 
-MIT — use it however you want. Learn from it, fork it, put it on a big screen in your office. I don't mind.
+MIT — use it however you want. Learn from it, fork it, put it on a big screen in your office. I don't really care...(As long as u have fun with it).
 
 ---
 
-**Built for HVAC engineers, mechanical engineering students, and anyone who thinks moist air thermodynamics is actually pretty cool.** If you're passionate about this stuff like I am, I hope this tool makes your day a little better. Enjoy! 🌡️💨
+**Built for HVAC engineers, mechanical engineering students, and anyone who thinks this stuff is actually pretty cool (like me).** If you also struggled to manually read these chart like I did, I hope this tool makes your day a little better. Enjoy!!

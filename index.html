@@ -7,15 +7,7 @@
     <title>Interactive Psychrometric Chart — ASHRAE-Accurate</title>
     <meta name="description"
         content="Fully interactive psychrometric chart with real-time calculations, formula display, and educational overlays. Based on ASHRAE Handbook fundamentals.">
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-LYDYFSTTGD"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-    
-      gtag('config', 'G-LYDYFSTTGD');
-    </script>
+
     <!-- KaTeX for mathematical formula rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -51,6 +43,19 @@
                 title="Show/hide value labels on chart">🏷️</span>
             <!-- Pin badge (always visible in header) -->
             <span class="pin-badge" id="pin-badge" title="Click to unpin">📌 Pinned</span>
+            <!-- Zoom controls -->
+            <span class="zoom-badge" id="zoom-badge"></span>
+            <button class="icon-btn" id="zoom-reset-btn" aria-label="Reset zoom" title="Reset zoom" style="display:none;">⟲</button>
+            
+            <!-- Separator -->
+            <div class="header-sep"></div>
+            
+            <!-- Elevation input -->
+            <div class="header-group elevation-group" title="Elevation (Altitude)">
+                <span style="font-size: 11px; opacity: 0.8; margin-right: 4px;">Elevation:</span>
+                <input type="number" id="elevation-input" value="0" step="100" min="-500" max="8000" class="elevation-input" />
+                <span class="elevation-unit" id="elevation-unit">m</span>
+            </div>
             <!-- Separator -->
             <div class="header-sep"></div>
             <!-- Unit toggle -->
@@ -77,6 +82,7 @@
             <ul>
                 <li><strong>Hover</strong> (or drag on mobile) to explore — the crosshair follows you with live values.
                 </li>
+                <li><strong>Scroll</strong> to zoom in/out. <strong>Ctrl+drag</strong> (or middle-click drag) to pan. Press <strong>Home</strong> to reset view.</li>
                 <li><strong>Click / Tap</strong> to pin a point. While pinned, <strong>edit any value</strong> or use
                     the ▲/▼ arrows.</li>
                 <li>Toggle <strong>°C / °F</strong>, show/hide <strong>lines</strong> (RH, Twb, h, v), and flip
@@ -242,16 +248,60 @@
 
             <!-- Tab: Processes -->
             <div class="tab-content" id="tab-processes">
-                <div class="panel-section process-toolbar">
-                    <button class="process-add-btn" id="add-process-btn">＋ Add Process</button>
-                    <button class="process-cancel-btn" id="cancel-process-btn">✕ Cancel</button>
-                    <button class="process-snap-toggle active" id="snap-toggle" title="Snap to existing points">🧲 Snap</button>
-                    <button class="process-move-btn" id="move-selected-btn" title="Drag to move selected processes">⤡ Move</button>
-                    <div class="process-status" id="process-status"></div>
+                <!-- Mode Toggle -->
+                <div class="panel-section process-mode-toggle-wrap" style="display: flex; justify-content: center; padding-top: 14px; padding-bottom: 0; border-bottom: none;">
+                    <div class="unit-toggle process-mode-toggle" id="process-mode-toggle">
+                        <button class="unit-toggle-btn active" data-mode="freeform" id="mode-freeform-btn">Freeform</button>
+                        <button class="unit-toggle-btn" data-mode="ahu" id="mode-ahu-btn">AHU Sequence</button>
+                    </div>
                 </div>
-                <div class="panel-section process-list-section">
-                    <div id="process-list"></div>
-                    <div class="process-empty" id="process-empty">No processes added. Click ＋ to define a process between two state points.</div>
+
+                <!-- Freeform Container -->
+                <div id="freeform-container">
+                    <div class="panel-section process-toolbar">
+                        <button class="process-add-btn" id="add-process-btn">＋ Add Process</button>
+                        <button class="process-cancel-btn" id="cancel-process-btn">✕ Cancel</button>
+                        <button class="process-snap-toggle active" id="snap-toggle" title="Snap to existing points">🧲 Snap</button>
+                        <button class="process-move-btn" id="move-selected-btn" title="Drag to move selected processes">⤡ Move</button>
+                        <div class="process-status" id="process-status"></div>
+                    </div>
+                    <div class="panel-section process-list-section">
+                        <div id="process-list"></div>
+                        <div class="process-empty" id="process-empty">No processes added. Click ＋ to define a process between two state points.</div>
+                    </div>
+                </div>
+
+                <!-- AHU Sequence Container -->
+                <div id="ahu-container" style="display: none;">
+                    <div class="panel-section process-toolbar">
+                        <button class="process-add-btn" id="ahu-set-oa-btn" style="background: linear-gradient(135deg, #009688, #00796B);">Set Outdoor Air</button>
+                        <button class="process-add-btn" id="ahu-set-ra-btn" style="background: linear-gradient(135deg, #009688, #00796B);">Set Return Air</button>
+                        <button class="process-cancel-btn" id="ahu-cancel-btn">✕ Cancel</button>
+                        <div class="process-status" id="ahu-status"></div>
+                    </div>
+                    
+                    <div class="panel-section process-list-section">
+                        <div id="ahu-system-block">
+                            <div class="process-empty" id="ahu-empty">Set both Outdoor Air and Return Air to begin defining an AHU sequence.</div>
+                        </div>
+                        
+                        <div class="ahu-add-stage-wrap" style="text-align: center; margin: 12px 0;">
+                            <button class="process-add-btn" id="ahu-add-stage-btn" style="display: none; width: 100%; background: linear-gradient(135deg, #009688, #00796B);">＋ Add Stage</button>
+                        </div>
+
+                        <div id="ahu-stage-list"></div>
+                    </div>
+
+                    <div class="panel-section panel-footer ahu-summary-footer" id="ahu-summary-footer" style="display: none;">
+                        <div class="val-row" style="background: transparent;">
+                            <span class="val-label">Net system ∆h</span>
+                            <span class="val-right"><span class="val-number" id="ahu-net-dh">—</span><span class="val-unit">kJ/kg</span></span>
+                        </div>
+                        <div class="val-row" style="background: transparent;">
+                            <span class="val-label">Total stage-by-stage ∆h</span>
+                            <span class="val-right"><span class="val-number" id="ahu-total-dh">—</span><span class="val-unit">kJ/kg</span></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </aside>

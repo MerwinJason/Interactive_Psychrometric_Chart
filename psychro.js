@@ -4,7 +4,17 @@
  * Standard atmospheric pressure: 101325 Pa (sea level)
  */
 const Psychro = (() => {
-    const P_ATM = 101325; // Pa
+    let current_P_ATM = 101325; // Pa (sea level)
+
+    function setAltitude(meters) {
+        // Standard barometric formula
+        // P = 101325 * (1 - 2.25577e-5 * Z)^5.25588
+        current_P_ATM = 101325 * Math.pow(1 - 2.25577e-5 * meters, 5.25588);
+    }
+    
+    function getPATM() {
+        return current_P_ATM;
+    }
 
     // ASHRAE coefficients for saturation pressure over liquid water (0–200°C)
     const C8  = -5.8002206e3;
@@ -42,7 +52,7 @@ const Psychro = (() => {
      * Saturation humidity ratio (kg/kg dry air)
      */
     function satHumidityRatio(T, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const Pws = satPressure(T);
         if (Pws >= P) return 0.3; // clamp
         return 0.621945 * Pws / (P - Pws);
@@ -52,7 +62,7 @@ const Psychro = (() => {
      * Humidity ratio from Tdb and RH (kg/kg)
      */
     function humidityRatio(Tdb, RH, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const Pws = satPressure(Tdb);
         const Pw = RH * Pws;
         if (Pw >= P) return 0.3;
@@ -63,7 +73,7 @@ const Psychro = (() => {
      * Partial pressure of water vapour (Pa)
      */
     function partialPressure(W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         return W * P / (0.621945 + W);
     }
 
@@ -71,7 +81,7 @@ const Psychro = (() => {
      * Relative humidity (0–1) from Tdb and W
      */
     function relHumidity(Tdb, W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const Pws = satPressure(Tdb);
         const Pw = partialPressure(W, P);
         return Math.min(Math.max(Pw / Pws, 0), 1);
@@ -82,7 +92,7 @@ const Psychro = (() => {
      * Uses bisection method for accuracy
      */
     function dewPoint(W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const Pw = partialPressure(W, P);
         if (Pw <= 0) return -60;
         // Bisection: find T where satPressure(T) = Pw
@@ -100,7 +110,7 @@ const Psychro = (() => {
      * Uses bisection on the psychrometric equation
      */
     function wetBulb(Tdb, W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         // For a given Twb guess, compute what W would be
         function wFromTwb(Twb) {
             const Ws_wb = satHumidityRatio(Twb, P);
@@ -136,7 +146,7 @@ const Psychro = (() => {
      * Ra = 287.042 J/(kg·K)
      */
     function specVolume(Tdb, W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const TK = Tdb + 273.15;
         return 287.042 * TK * (1 + 1.6078 * W) / P;
     }
@@ -145,7 +155,7 @@ const Psychro = (() => {
      * Compute all properties from Tdb and W
      */
     function allProps(Tdb, W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const RH = relHumidity(Tdb, W, P);
         const Tdp = dewPoint(W, P);
         const Twb = wetBulb(Tdb, W, P);
@@ -160,13 +170,13 @@ const Psychro = (() => {
      * Check if a (Tdb, W) point is valid (below saturation curve)
      */
     function isValid(Tdb, W, P) {
-        P = P || P_ATM;
+        P = P || current_P_ATM;
         const Ws = satHumidityRatio(Tdb, P);
         return W >= 0 && W <= Ws * 1.001;
     }
 
     return {
-        P_ATM, satPressure, satHumidityRatio, humidityRatio,
+        getPATM, setAltitude, satPressure, satHumidityRatio, humidityRatio,
         partialPressure, relHumidity, dewPoint, wetBulb,
         enthalpy, specVolume, allProps, isValid
     };
