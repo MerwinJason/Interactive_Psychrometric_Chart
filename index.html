@@ -41,6 +41,15 @@
             <!-- Labels toggle -->
             <span class="chart-labels-toggle active" id="toggle-labels"
                 title="Show/hide value labels on chart">🏷️</span>
+            <!-- Crosshairs toggle -->
+            <span class="chart-labels-toggle active" id="toggle-crosshairs"
+                title="Show/hide dotted crosshairs on chart" style="margin-left: 2px;">⌖</span>
+            <!-- Dotted lines / highlights toggle -->
+            <span class="chart-labels-toggle active" id="toggle-dynamic-lines"
+                title="Show/hide dynamic highlight curves" style="margin-left: 2px;">〰</span>
+            <!-- Axis snap toggle -->
+            <span class="chart-labels-toggle" id="toggle-axis-snap"
+                title="Toggle Axis Snapping (or hold Shift)" style="margin-left: 2px;">🧲</span>
             <!-- Pin badge (always visible in header) -->
             <span class="pin-badge" id="pin-badge" title="Click to unpin">📌 Pinned</span>
             <!-- Zoom controls -->
@@ -75,50 +84,48 @@
     <div id="tutorial-overlay">
         <div class="tutorial-card">
             <h2>ψ Interactive Psychrometric Chart</h2>
-            <p class="sub">Hover, pin, tweak any value - it all updates in real
-                time, with live formulas showing the math.</p>
+            <p class="sub" style="margin-bottom: 16px;">ASHRAE-accurate calculations, interactive charts, and real-time system modeling.</p>
 
-            <h3>🖱️ How to use</h3>
-            <ul>
-                <li><strong>Hover</strong> (or drag on mobile) to explore — the crosshair follows you with live values.
-                </li>
-                <li><strong>Scroll</strong> to zoom in/out. <strong>Ctrl+drag</strong> (or middle-click drag) to pan. Press <strong>Home</strong> to reset view.</li>
-                <li><strong>Click / Tap</strong> to pin a point. While pinned, <strong>edit any value</strong> or use
-                    the ▲/▼ arrows.</li>
-                <li>Toggle <strong>°C / °F</strong>, show/hide <strong>lines</strong> (RH, Twb, h, v), and flip
-                    <strong>labels</strong> on/off — all from the header.
-                </li>
-                <li>Switch to the <strong>Formulas</strong> tab to see every calculation step rendered in real time.
-                </li>
-            </ul>
+            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <div style="flex: 1; min-width: 220px;">
+                    <h3 style="margin-top:0;">🖱️ Explore & Edit</h3>
+                    <ul>
+                        <li><strong>Hover</strong> for live values, <strong>Click</strong> to pin and edit points.</li>
+                        <li><strong>Scroll</strong> to zoom, <strong>Ctrl+Drag</strong> to pan, <strong>Home</strong> to reset.</li>
+                        <li>Set <strong>Elevation</strong>, units (°C/°F), and toggle lines in the header.</li>
+                        <li>View step-by-step math in the <strong>Formulas</strong> tab.</li>
+                    </ul>
+                </div>
+                <div style="flex: 1; min-width: 220px;">
+                    <h3 style="margin-top:0;">🔄 Model Systems <span style="font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle;">NEW</span></h3>
+                    <ul>
+                        <li><strong>Freeform:</strong> Add custom processes, toggle <strong>Snap</strong>, and <strong>Move</strong> them directly on the chart.</li>
+                        <li><strong>AHU Sequence:</strong> Set Outdoor & Return air to model Mixing, Coils, and Fans with stage-by-stage summaries.</li>
+                    </ul>
+                </div>
+            </div>
 
-            <h3>📈 The lines</h3>
-            <ul>
-                <li><span class="color-key" style="background:#58a6ff"></span><strong>Blue</strong> — Relative Humidity
-                    curves</li>
-                <li><span class="color-key" style="background:#3fb950"></span><strong>Green</strong> — Wet Bulb
-                    Temperature</li>
-                <li><span class="color-key" style="background:#f85149"></span><strong>Red dashed</strong> — Enthalpy
-                    (kJ/kg)</li>
-                <li><span class="color-key" style="background:#bc8cff"></span><strong>Purple dashed</strong> — Specific
-                    Volume (m³/kg)</li>
-            </ul>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-subtle); font-size: 11px; display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: center; color: var(--text-secondary);">
+                <span><span class="color-key" style="background:#58a6ff"></span>Relative Humidity</span>
+                <span><span class="color-key" style="background:#3fb950"></span>Wet Bulb</span>
+                <span><span class="color-key" style="background:#f85149"></span>Enthalpy</span>
+                <span><span class="color-key" style="background:#bc8cff"></span>Specific Volume</span>
+            </div>
 
-            <p style="font-size:12px;color:var(--text-muted);margin-top:12px">ASHRAE Handbook -
-                Fundamentals (SI) · 101
-                325 Pa <br> MIT License - use it however you want.</p>
-            <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">Enjoy!</p>
-
-            <button class="tutorial-close-btn" id="tutorial-close">Got it — Let's explore!</button>
+            <div style="text-align: center; margin-top: 16px;">
+                <p style="font-size:11px;color:var(--text-muted);margin-bottom:0;">ASHRAE Handbook - Fundamentals (SI) · MIT License</p>
+                <button class="tutorial-close-btn" id="tutorial-close" style="margin-top: 12px;">Got it — Let's explore!</button>
+            </div>
         </div>
     </div>
 
     <!-- ===================== MAIN ===================== -->
     <main>
         <!-- Chart canvas area -->
-        <div id="chart-container">
+        <div id="chart-container" style="position: relative;">
             <canvas id="static-canvas"></canvas>
             <canvas id="dynamic-canvas"></canvas>
+            <div id="label-overlay"></div>
         </div>
 
         <!-- Side panel -->
@@ -126,8 +133,8 @@
             <!-- Tab bar -->
             <div class="tab-bar">
                 <button class="tab-btn active" data-tab="properties">Air Properties</button>
-                <button class="tab-btn" data-tab="formulas">Formulas</button>
                 <button class="tab-btn" data-tab="processes">Processes</button>
+                <button class="tab-btn" data-tab="formulas">Formulas</button>
             </div>
 
             <!-- Tab: Properties -->
@@ -208,6 +215,75 @@
                 </div>
             </div>
 
+
+
+            <!-- Tab: Processes -->
+            <div class="tab-content" id="tab-processes">
+                <!-- Mode Toggle -->
+                <div class="panel-section process-mode-toggle-wrap" style="display: flex; justify-content: center; padding-top: 14px; padding-bottom: 0; border-bottom: none;">
+                    <div class="unit-toggle process-mode-toggle" id="process-mode-toggle">
+                        <button class="unit-toggle-btn active" data-mode="freeform" id="mode-freeform-btn">Freeform</button>
+                        <button class="unit-toggle-btn" data-mode="ahu" id="mode-ahu-btn">AHU Sequence</button>
+                    </div>
+                </div>
+
+                <!-- Freeform Container -->
+                <div id="freeform-container">
+                    <div class="panel-section process-toolbar">
+                        <button class="process-add-btn" id="add-process-btn">＋ Add Process</button>
+                        <button class="process-cancel-btn" id="cancel-process-btn">✕ Cancel</button>
+                        <button class="process-snap-toggle active" id="snap-toggle" title="Snap to existing points">🧲 Snap</button>
+                        <button class="process-move-btn" id="move-selected-btn" title="Drag to move selected processes">⤡ Move</button>
+                        <div class="process-status" id="process-status"></div>
+                    </div>
+                    <div class="panel-section process-list-section">
+                        <div id="process-list"></div>
+                        <div class="process-empty" id="process-empty">No processes added. Click ＋ to define a process between two state points.</div>
+                    </div>
+                </div>
+
+                <!-- AHU Sequence Container -->
+                <div id="ahu-container" style="display: none;">
+                    <div class="panel-section process-toolbar" style="flex-direction: column; align-items: stretch;">
+                        <button class="process-add-btn" id="ahu-set-oa-btn" style="background: linear-gradient(135deg, #009688, #00796B);">Set Outdoor Air</button>
+                        <button class="process-add-btn" id="ahu-set-ra-btn" style="background: linear-gradient(135deg, #009688, #00796B);">Set Return Air</button>
+                        <button class="process-add-btn" id="ahu-load-example-btn" style="background: transparent; border: 1px solid #009688; color: #009688;">Load Example</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="process-add-btn" id="ahu-clear-btn" style="flex: 1; background: transparent; border: 1px solid #d32f2f; color: #d32f2f;">Clear Chart</button>
+                            <button class="process-add-btn" id="ahu-reset-labels-btn" style="flex: 1; background: transparent; border: 1px solid #fbc02d; color: #fbc02d;">Reset Labels</button>
+                        </div>
+                        <button class="process-cancel-btn" id="ahu-cancel-btn">✕ Cancel</button>
+                        <div class="process-status" id="ahu-status"></div>
+                    </div>
+                    
+                    <div class="panel-section process-list-section">
+                        <div id="ahu-system-block">
+                            <div class="process-empty" id="ahu-empty">Set both Outdoor Air and Return Air to begin defining an AHU sequence.</div>
+                        </div>
+                        
+                        <div class="ahu-add-stage-wrap" style="text-align: center; margin: 12px 0;">
+                            <button class="process-add-btn" id="ahu-add-stage-btn" style="display: none; width: 100%; background: linear-gradient(135deg, #009688, #00796B);">＋ Add Stage</button>
+                        </div>
+
+                        <div id="ahu-stage-list"></div>
+                    </div>
+
+                    <div class="panel-section panel-footer ahu-summary-footer" id="ahu-summary-footer" style="display: none;">
+                        <div class="val-row" style="background: transparent;">
+                            <span class="val-label">Net system ∆h</span>
+                            <span class="val-right"><span class="val-number" id="ahu-net-dh">—</span><span class="val-unit">kJ/kg</span></span>
+                        </div>
+                        <div class="val-row" style="background: transparent;">
+                            <span class="val-label">Total stage-by-stage ∆h</span>
+                            <span class="val-right"><span class="val-number" id="ahu-total-dh">—</span><span class="val-unit">kJ/kg</span></span>
+                        </div>
+                    </div>
+                    <div class="panel-section panel-footer" style="padding-top: 0; color: rgba(255, 255, 255, 0.4); text-align: center; border-top: none;">
+                        * OA/RA and stage sequences are user-defined test points.
+                    </div>
+                </div>
+            </div>
+
             <!-- Tab: Formulas -->
             <div class="tab-content" id="tab-formulas">
                 <div class="panel-section">
@@ -242,65 +318,6 @@
                     <div class="formula-item">
                         <div class="f-label">Wet Bulb</div>
                         <div class="f-math" id="f-twb"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tab: Processes -->
-            <div class="tab-content" id="tab-processes">
-                <!-- Mode Toggle -->
-                <div class="panel-section process-mode-toggle-wrap" style="display: flex; justify-content: center; padding-top: 14px; padding-bottom: 0; border-bottom: none;">
-                    <div class="unit-toggle process-mode-toggle" id="process-mode-toggle">
-                        <button class="unit-toggle-btn active" data-mode="freeform" id="mode-freeform-btn">Freeform</button>
-                        <button class="unit-toggle-btn" data-mode="ahu" id="mode-ahu-btn">AHU Sequence</button>
-                    </div>
-                </div>
-
-                <!-- Freeform Container -->
-                <div id="freeform-container">
-                    <div class="panel-section process-toolbar">
-                        <button class="process-add-btn" id="add-process-btn">＋ Add Process</button>
-                        <button class="process-cancel-btn" id="cancel-process-btn">✕ Cancel</button>
-                        <button class="process-snap-toggle active" id="snap-toggle" title="Snap to existing points">🧲 Snap</button>
-                        <button class="process-move-btn" id="move-selected-btn" title="Drag to move selected processes">⤡ Move</button>
-                        <div class="process-status" id="process-status"></div>
-                    </div>
-                    <div class="panel-section process-list-section">
-                        <div id="process-list"></div>
-                        <div class="process-empty" id="process-empty">No processes added. Click ＋ to define a process between two state points.</div>
-                    </div>
-                </div>
-
-                <!-- AHU Sequence Container -->
-                <div id="ahu-container" style="display: none;">
-                    <div class="panel-section process-toolbar">
-                        <button class="process-add-btn" id="ahu-set-oa-btn" style="background: linear-gradient(135deg, #009688, #00796B);">Set Outdoor Air</button>
-                        <button class="process-add-btn" id="ahu-set-ra-btn" style="background: linear-gradient(135deg, #009688, #00796B);">Set Return Air</button>
-                        <button class="process-cancel-btn" id="ahu-cancel-btn">✕ Cancel</button>
-                        <div class="process-status" id="ahu-status"></div>
-                    </div>
-                    
-                    <div class="panel-section process-list-section">
-                        <div id="ahu-system-block">
-                            <div class="process-empty" id="ahu-empty">Set both Outdoor Air and Return Air to begin defining an AHU sequence.</div>
-                        </div>
-                        
-                        <div class="ahu-add-stage-wrap" style="text-align: center; margin: 12px 0;">
-                            <button class="process-add-btn" id="ahu-add-stage-btn" style="display: none; width: 100%; background: linear-gradient(135deg, #009688, #00796B);">＋ Add Stage</button>
-                        </div>
-
-                        <div id="ahu-stage-list"></div>
-                    </div>
-
-                    <div class="panel-section panel-footer ahu-summary-footer" id="ahu-summary-footer" style="display: none;">
-                        <div class="val-row" style="background: transparent;">
-                            <span class="val-label">Net system ∆h</span>
-                            <span class="val-right"><span class="val-number" id="ahu-net-dh">—</span><span class="val-unit">kJ/kg</span></span>
-                        </div>
-                        <div class="val-row" style="background: transparent;">
-                            <span class="val-label">Total stage-by-stage ∆h</span>
-                            <span class="val-right"><span class="val-number" id="ahu-total-dh">—</span><span class="val-unit">kJ/kg</span></span>
-                        </div>
                     </div>
                 </div>
             </div>

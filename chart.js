@@ -48,6 +48,8 @@ class PsychroChart {
 
         // Show value labels on crosshair
         this.showLabels = true;
+        this.showCrosshairs = true;
+        this.showDynamicHighlights = true;
 
         // Process lines data (set from app.js)
         this.processes = [];
@@ -407,6 +409,9 @@ class PsychroChart {
                 if (lp) {
                     ctx.fillStyle = this.colors.rhLabel;
                     ctx.textAlign = 'left';
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = this.colors.bg;
+                    ctx.strokeText((rh * 100).toFixed(0) + '%', lp.x + 2, lp.y - 3);
                     ctx.fillText((rh * 100).toFixed(0) + '%', lp.x + 2, lp.y - 3);
                 }
             }
@@ -439,6 +444,9 @@ class PsychroChart {
                 ctx.textAlign = 'right';
                 const lp = pts[0];
                 const dispT = this.toDisplayTemp(twb);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = this.colors.bg;
+                ctx.strokeText(Math.round(dispT) + '°', lp.x - 2, lp.y - 2);
                 ctx.fillText(Math.round(dispT) + '°', lp.x - 2, lp.y - 2);
             }
         });
@@ -459,6 +467,9 @@ class PsychroChart {
                 ctx.font = '8px Inter, sans-serif';
                 ctx.textAlign = 'left';
                 const lp = pts[0];
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = this.colors.bg;
+                ctx.strokeText(h, lp.x - 14, lp.y - 2);
                 ctx.fillText(h, lp.x - 14, lp.y - 2);
             }
         });
@@ -481,6 +492,9 @@ class PsychroChart {
                 ctx.font = '8px Inter, sans-serif';
                 ctx.textAlign = 'center';
                 const lp = pts[pts.length - 1];
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = this.colors.bg;
+                ctx.strokeText(v.toFixed(2), lp.x, lp.y + 12);
                 ctx.fillText(v.toFixed(2), lp.x, lp.y + 12);
             }
         });
@@ -531,20 +545,24 @@ class PsychroChart {
         ctx.clip();
 
         // --- Highlight existing lines or draw dotted ---
-        if (this.lineVisible.rh) this._highlightRH(ctx, tdb, w, props.RH);
-        if (this.lineVisible.twb) this._highlightTwb(ctx, tdb, w, props.Twb);
-        if (this.lineVisible.enth) this._highlightEnthalpy(ctx, tdb, w, props.h);
-        if (this.lineVisible.vol) this._highlightVolume(ctx, tdb, w, props.v);
+        if (this.showDynamicHighlights) {
+            if (this.lineVisible.rh) this._highlightRH(ctx, tdb, w, props.RH);
+            if (this.lineVisible.twb) this._highlightTwb(ctx, tdb, w, props.Twb);
+            if (this.lineVisible.enth) this._highlightEnthalpy(ctx, tdb, w, props.h);
+            if (this.lineVisible.vol) this._highlightVolume(ctx, tdb, w, props.v);
+        }
 
         // --- Crosshair ---
-        ctx.strokeStyle = this.colors.crosshair;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([6, 4]);
-        // Vertical line (Tdb)
-        ctx.beginPath(); ctx.moveTo(mx, this.pad.top); ctx.lineTo(mx, this.pad.top + this.chartH); ctx.stroke();
-        // Horizontal line (W)
-        ctx.beginPath(); ctx.moveTo(this.pad.left, my); ctx.lineTo(this.pad.left + this.chartW, my); ctx.stroke();
-        ctx.setLineDash([]);
+        if (this.showCrosshairs) {
+            ctx.strokeStyle = this.colors.crosshair;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([6, 4]);
+            // Vertical line (Tdb)
+            ctx.beginPath(); ctx.moveTo(mx, this.pad.top); ctx.lineTo(mx, this.pad.top + this.chartH); ctx.stroke();
+            // Horizontal line (W)
+            ctx.beginPath(); ctx.moveTo(this.pad.left, my); ctx.lineTo(this.pad.left + this.chartW, my); ctx.stroke();
+            ctx.setLineDash([]);
+        }
 
         // Crosshair dot
         ctx.fillStyle = this.colors.crosshair;
@@ -619,47 +637,7 @@ class PsychroChart {
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
 
-                // Data label above the dot
-                const dispT = this.toDisplayTemp(pt.tdb).toFixed(1);
-                const dispW = (pt.w * 1000).toFixed(1);
-                const labelText = `${pt.label}: ${dispT}${this.tempUnit()}, ${dispW} g/kg`;
 
-                ctx.font = "500 8px 'JetBrains Mono', monospace";
-                const metrics = ctx.measureText(labelText);
-                const tw = metrics.width;
-                const th = 11;
-                const px = 4, py = 2;
-                const bw = tw + px * 2;
-                const bh = th + py * 2;
-
-                // Position above the dot, centered
-                let lx = pt.x - bw / 2;
-                let ly = pt.y - 16 - bh;
-
-                // Clamp to chart bounds
-                lx = Math.max(this.pad.left + 2, Math.min(lx, this.pad.left + this.chartW - bw - 2));
-                ly = Math.max(this.pad.top + 2, Math.min(ly, this.pad.top + this.chartH - bh - 2));
-
-                // Background pill
-                ctx.fillStyle = this.colors.labelBg;
-                ctx.beginPath();
-                if (ctx.roundRect) {
-                    ctx.roundRect(lx, ly, bw, bh, 3);
-                } else {
-                    ctx.rect(lx, ly, bw, bh);
-                }
-                ctx.fill();
-
-                // Border in process color
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 0.8;
-                ctx.stroke();
-
-                // Text in process color
-                ctx.fillStyle = color;
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(labelText, lx + px, ly + bh / 2);
             });
         }
 
@@ -719,41 +697,7 @@ class PsychroChart {
             ctx.fillText(label, px, py + 0.5);
         };
 
-        const drawLabel = (pt, text) => {
-            const px = this.tdbToX(pt.tdb), py = this.wToY(pt.w);
-            const dispT = this.toDisplayTemp(pt.tdb).toFixed(1);
-            const dispW = (pt.w * 1000).toFixed(1);
-            const labelText = `${text}: ${dispT}${this.tempUnit()}, ${dispW} g/kg`;
-            
-            ctx.font = "500 8px 'JetBrains Mono', monospace";
-            const metrics = ctx.measureText(labelText);
-            const tw = metrics.width;
-            const th = 11;
-            const pdx = 4, pdy = 2;
-            const bw = tw + pdx * 2;
-            const bh = th + pdy * 2;
 
-            let lx = px - bw / 2;
-            let ly = py - 18 - bh;
-            
-            lx = Math.max(this.pad.left + 2, Math.min(lx, this.pad.left + this.chartW - bw - 2));
-            ly = Math.max(this.pad.top + 2, Math.min(ly, this.pad.top + this.chartH - bh - 2));
-
-            ctx.fillStyle = this.colors.labelBg;
-            ctx.beginPath();
-            if (ctx.roundRect) ctx.roundRect(lx, ly, bw, bh, 3);
-            else ctx.rect(lx, ly, bw, bh);
-            ctx.fill();
-
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
-
-            ctx.fillStyle = color;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(labelText, lx + pdx, ly + bh / 2);
-        };
 
         // Draw mixing triangle lines if both OA and RA are present
         if (this.ahuChain.oa && this.ahuChain.ra && this.ahuMA) {
@@ -775,21 +719,17 @@ class PsychroChart {
         // Draw nodes over the lines
         if (this.ahuChain.oa) {
             drawNode(this.ahuChain.oa, 'O');
-            drawLabel(this.ahuChain.oa, 'OA');
         }
         if (this.ahuChain.ra) {
             drawNode(this.ahuChain.ra, 'R');
-            drawLabel(this.ahuChain.ra, 'RA');
         }
         if (this.ahuChain.oa && this.ahuChain.ra && this.ahuMA) {
             drawNode(this.ahuMA, 'M');
-            drawLabel(this.ahuMA, 'MA');
         }
 
         if (this.ahuChain.stages) {
             this.ahuChain.stages.forEach((stage, idx) => {
                 drawNode(stage.exit, (idx + 1).toString());
-                drawLabel(stage.exit, `Stg ${idx+1}`);
             });
         }
 

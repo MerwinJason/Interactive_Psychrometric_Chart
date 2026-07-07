@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const unitFBtn        = document.getElementById('unit-f-btn');
     const pinBadge        = document.getElementById('pin-badge');
     const labelsToggle    = document.getElementById('toggle-labels');
+    const crosshairsToggle = document.getElementById('toggle-crosshairs');
+    const axisSnapToggle  = document.getElementById('toggle-axis-snap');
 
     // ALL inputs (every value is editable when pinned)
     const inputs = {
@@ -42,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let animFrame = null;
     let useFahrenheit = false;
     let showLabels = true;
+    let showCrosshairs = true;
+    let axisSnap = false;
 
     // Zoom/pan state
     let isPanning = false;
@@ -96,6 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const ahuSetOaBtn     = document.getElementById('ahu-set-oa-btn');
     const ahuSetRaBtn     = document.getElementById('ahu-set-ra-btn');
+    const ahuLoadExampleBtn = document.getElementById('ahu-load-example-btn');
+    const ahuClearBtn     = document.getElementById('ahu-clear-btn');
+    const ahuResetLabelsBtn = document.getElementById('ahu-reset-labels-btn');
     const ahuCancelBtn    = document.getElementById('ahu-cancel-btn');
     const ahuStatus       = document.getElementById('ahu-status');
     const ahuSystemBlock  = document.getElementById('ahu-system-block');
@@ -224,6 +231,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     chart.showLabels = showLabels;
 
+    /* ---- Crosshairs toggle ---- */
+    if (crosshairsToggle) {
+        crosshairsToggle.addEventListener('click', () => {
+            showCrosshairs = !showCrosshairs;
+            crosshairsToggle.classList.toggle('active', showCrosshairs);
+            chart.showCrosshairs = showCrosshairs;
+            if (pinnedPoint && lastProps) {
+                chart.drawDynamic(pinnedPoint.tdb, pinnedPoint.w, lastProps);
+            } else {
+                chart.drawDynamic(null, null, null);
+            }
+        });
+    }
+
+    /* ---- Dynamic Lines toggle ---- */
+    const dynamicLinesToggle = document.getElementById('toggle-dynamic-lines');
+    let showDynamicLines = true;
+    if (dynamicLinesToggle) {
+        dynamicLinesToggle.addEventListener('click', () => {
+            showDynamicLines = !showDynamicLines;
+            dynamicLinesToggle.classList.toggle('active', showDynamicLines);
+            chart.showDynamicHighlights = showDynamicLines;
+            if (pinnedPoint && lastProps) {
+                chart.drawDynamic(pinnedPoint.tdb, pinnedPoint.w, lastProps);
+            } else {
+                chart.drawDynamic(null, null, null);
+            }
+        });
+    }
+
+    /* ---- Axis Snap toggle ---- */
+    if (axisSnapToggle) {
+        axisSnapToggle.addEventListener('click', () => {
+            axisSnap = !axisSnap;
+            axisSnapToggle.classList.toggle('active', axisSnap);
+        });
+    }
+
     /* ---- Resize handling ---- */
     let resizeTimer;
     window.addEventListener('resize', () => {
@@ -237,6 +282,133 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 80);
     });
 
+    /* ---- HTML Label Syncing ---- */
+    const labelOverlay = document.getElementById('label-overlay');
+    const labelOffsets = {};
+
+    function resolveLabelOverlaps(rects) {
+        const padding = 4;
+        let moved = true;
+        let iterations = 0;
+        while (moved && iterations < 15) {
+            moved = false;
+            for (let i = 0; i < rects.length; i++) {
+                for (let j = i + 1; j < rects.length; j++) {
+                    const r1 = rects[i], r2 = rects[j];
+                    if (r1.x < r2.x + r2.w + padding && r1.x + r1.w + padding > r2.x &&
+                        r1.y < r2.y + r2.h + padding && r1.y + r1.h + padding > r2.y) {
+                        const dy = (r1.y + r1.h/2) - (r2.y + r2.h/2);
+                        const push = dy > 0 ? 2 : -2;
+                        if (dy === 0) { r1.y -= 2; r2.y += 2; }
+                        else { r1.y += push; r2.y -= push; }
+                        moved = true;
+                    }
+                }
+            }
+            iterations++;
+        }
+    }
+
+    function syncHtmlLabels() {
+        if (!labelOverlay) return;
+        if (!showLabels) {
+            labelOverlay.innerHTML = '';
+            return;
+        }
+
+        const nodes = [];
+        if (ahuMode) {
+            if (ahuChain.oa) nodes.push({ id: 'OA', label: 'OA', pt: ahuChain.oa });
+            if (ahuChain.ra) nodes.push({ id: 'RA', label: 'RA', pt: ahuChain.ra });
+            const ma = getMA();
+            if (ahuChain.oa && ahuChain.ra && ma) nodes.push({ id: 'MA', label: 'MA', pt: ma });
+            
+            if (ahuChain.stages) {
+                ahuChain.stages.forEach((stg, i) => {
+                    nodes.push({ id: `Stg${i+1}`, label: `Stg ${i+1}`, pt: stg.exit });
+                });
+            }
+        } else {
+            processes.forEach(p => {
+                if (p.pointA) nodes.push({ id: p.id + 'A', label: p.label, pt: p.pointA, isStart: true });
+                if (p.pointB) nodes.push({ id: p.id + 'B', label: '', pt: p.pointB, isEnd: true });
+            });
+        }
+
+        const rects = [];
+        nodes.forEach(n => {
+            if (!Psychro.isValid(n.pt.tdb, n.pt.w)) return;
+            const x = chart.tdbToX(n.pt.tdb);
+            const y = chart.wToY(n.pt.w);
+            
+            if (!labelOffsets[n.id]) labelOffsets[n.id] = { dx: 0, dy: -25 };
+            
+            const dispT = displayTemp(n.pt.tdb).toFixed(1);
+            const dispW = (n.pt.w * 1000).toFixed(1);
+            const text = n.label ? `${n.label}: ${dispT}${tempUnit()}, ${dispW}g/kg` : `${dispT}${tempUnit()}, ${dispW}g/kg`;
+            
+            // Approximate width: 6px per char + 12px padding
+            const width = text.length * 6 + 12;
+            const height = 20;
+            
+            rects.push({
+                id: n.id, text,
+                x: x + labelOffsets[n.id].dx - width/2,
+                y: y + labelOffsets[n.id].dy - height/2,
+                w: width, h: height,
+                rawX: x, rawY: y
+            });
+        });
+        
+        resolveLabelOverlaps(rects);
+        
+        const existingIds = new Set(Array.from(labelOverlay.children).map(c => c.id));
+        
+        rects.forEach(r => {
+            const elId = `label-${r.id}`;
+            let el = document.getElementById(elId);
+            if (!el) {
+                el = document.createElement('div');
+                el.className = 'floating-node-label';
+                el.id = elId;
+                
+                let isDragging = false;
+                let startX, startY, origDx, origDy;
+                
+                el.addEventListener('pointerdown', (e) => {
+                    isDragging = true;
+                    startX = e.clientX; startY = e.clientY;
+                    origDx = labelOffsets[r.id].dx; origDy = labelOffsets[r.id].dy;
+                    el.setPointerCapture(e.pointerId);
+                    e.stopPropagation();
+                });
+                el.addEventListener('pointermove', (e) => {
+                    if (!isDragging) return;
+                    labelOffsets[r.id].dx = origDx + (e.clientX - startX);
+                    labelOffsets[r.id].dy = origDy + (e.clientY - startY);
+                    syncHtmlLabels();
+                });
+                el.addEventListener('pointerup', (e) => {
+                    isDragging = false;
+                    el.releasePointerCapture(e.pointerId);
+                });
+                
+                labelOverlay.appendChild(el);
+            }
+            
+            el.textContent = r.text;
+            el.style.left = (r.x + r.w/2) + 'px'; // +w/2 because CSS has transform: translate(-50%, -50%)
+            el.style.top = (r.y + r.h/2) + 'px';
+            
+            existingIds.delete(elId);
+        });
+        
+        existingIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        });
+    }
+
     /* ---- Zoom/Pan controls ---- */
     function fullRedraw() {
         chart.drawStatic();
@@ -245,6 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             chart.drawDynamic(null, null, null);
         }
+        syncHtmlLabels();
     }
 
     function updateZoomBadge() {
@@ -345,6 +518,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ---- Snap helper for crosshair ---- */
     function applySnap(tdb, w) {
+        if (axisSnap) {
+            const snapT = useFahrenheit ? 1 : 0.5;
+            let dTdb = useFahrenheit ? toF(tdb) : tdb;
+            dTdb = Math.round(dTdb / snapT) * snapT;
+            tdb = useFahrenheit ? toC(dTdb) : dTdb;
+            let wG = w * 1000;
+            wG = Math.round(wG / 0.5) * 0.5;
+            w = wG / 1000;
+        }
+
         if (!snapEnabled || processes.length === 0) return { tdb, w };
         const SNAP_PX = 15;
         const clickX = chart.tdbToX(tdb);
@@ -378,6 +561,57 @@ document.addEventListener('DOMContentLoaded', () => {
             updateZoomBadge();
             return;
         }
+
+        const hit = chart.hitTest(e.clientX, e.clientY);
+
+        // Handle point dragging
+        if (pointDragTarget && hit) {
+            const snapped = applySnap(hit.tdb, hit.w);
+            if (pointDragTarget === 'pinned' && pinnedPoint) {
+                pinnedPoint.tdb = snapped.tdb;
+                pinnedPoint.w = snapped.w;
+                lastProps = Psychro.allProps(snapped.tdb, snapped.w);
+                updateAllInputs(lastProps);
+            } else if (pointDragTarget === 'ahuOA' && ahuChain.oa) {
+                ahuChain.oa.tdb = snapped.tdb; ahuChain.oa.w = snapped.w;
+                syncAhuToChart();
+            } else if (pointDragTarget === 'ahuRA' && ahuChain.ra) {
+                ahuChain.ra.tdb = snapped.tdb; ahuChain.ra.w = snapped.w;
+                syncAhuToChart();
+            } else if (pointDragTarget.startsWith('ahuStg:')) {
+                const idx = parseInt(pointDragTarget.split(':')[1]);
+                ahuChain.stages[idx].exit.tdb = snapped.tdb;
+                ahuChain.stages[idx].exit.w = snapped.w;
+                syncAhuToChart();
+            }
+            fullRedraw();
+            return;
+        }
+
+        // Hover detection for points
+        lastHoverTarget = null;
+        if (hit && !moveMode && !addProcessMode && !ahuAddMode && !isPanning) {
+            const cx = chart.tdbToX(hit.tdb);
+            const cy = chart.wToY(hit.w);
+            let bestD = 15; // POINT_HIT_RADIUS
+            const check = (pt, id) => {
+                if (!pt) return;
+                const d = Math.hypot(chart.tdbToX(pt.tdb) - cx, chart.wToY(pt.w) - cy);
+                if (d < bestD) { bestD = d; lastHoverTarget = id; }
+            };
+            if (pinnedPoint) check(pinnedPoint, 'pinned');
+            if (ahuMode) {
+                check(ahuChain.oa, 'ahuOA');
+                check(ahuChain.ra, 'ahuRA');
+                if (ahuChain.stages) ahuChain.stages.forEach((s, i) => check(s.exit, 'ahuStg:' + i));
+            }
+            if (lastHoverTarget) {
+                dynamicCanvas.style.cursor = 'grab';
+                chart.drawDynamic(hit.tdb, hit.w, Psychro.allProps(hit.tdb, hit.w));
+                return;
+            }
+        }
+        dynamicCanvas.style.cursor = isPanning ? 'grabbing' : 'crosshair';
 
         // Handle move-mode drag
         if (moveMode && moveDragStart) {
@@ -423,8 +657,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    let pointDragTarget = null;
+    let lastHoverTarget = null;
+
     // Move mode + Pan: mousedown to start drag
     dynamicCanvas.addEventListener('mousedown', (e) => {
+        if (lastHoverTarget) {
+            pointDragTarget = lastHoverTarget;
+            dynamicCanvas.style.cursor = 'grabbing';
+            e.preventDefault();
+            return;
+        }
         // Pan: middle button or Ctrl/Cmd+left
         if (e.button === 1 || (e.button === 0 && (e.ctrlKey || e.metaKey))) {
             isPanning = true;
@@ -457,6 +700,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Move mode + Pan: mouseup to finish drag
     dynamicCanvas.addEventListener('mouseup', (e) => {
+        if (pointDragTarget) {
+            pointDragTarget = null;
+            if (lastHoverTarget) dynamicCanvas.style.cursor = 'grab';
+            return;
+        }
         if (isPanning) {
             isPanning = false;
             dynamicCanvas.style.cursor = moveMode ? 'move' : 'crosshair';
@@ -470,6 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     dynamicCanvas.addEventListener('click', (e) => {
+        if (lastHoverTarget || pointDragTarget) return; // Prevent pin-click when clicking an existing point
         // ---- Swallow click after pan ----
         if (wasPanning) { wasPanning = false; return; }
         // ---- Move mode: swallow clicks ----
@@ -922,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             chart.drawDynamic(null, null, null);
         }
+        if (typeof syncHtmlLabels === 'function') syncHtmlLabels();
     }
 
     /** Resolve an edited field for a process point back to { tdb, w } */
@@ -1319,6 +1569,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             chart.drawDynamic(null, null, null);
         }
+        if (typeof syncHtmlLabels === 'function') syncHtmlLabels();
         renderAhuSidebar();
     }
 
@@ -1347,6 +1598,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ahuSetOaBtn.addEventListener('click', () => setAhuAddMode('oa'));
     ahuSetRaBtn.addEventListener('click', () => setAhuAddMode('ra'));
+    if (ahuLoadExampleBtn) {
+        ahuLoadExampleBtn.addEventListener('click', () => {
+            ahuChain.oa = { tdb: 35, w: 0.016 }; // Hot humid OA
+            ahuChain.ra = { tdb: 24, w: 0.009 }; // Cool RA
+            ahuChain.mixRatio = 0.2;
+            ahuChain.stages = [
+                { id: ++stageIdCounter, label: 'Cooling Coil', exit: { tdb: 12, w: 0.008 } },
+                { id: ++stageIdCounter, label: 'Reheat Coil', exit: { tdb: 16, w: 0.008 } }
+            ];
+            syncAhuToChart();
+        });
+    }
+    
+    if (ahuClearBtn) {
+        ahuClearBtn.addEventListener('click', () => {
+            ahuChain.oa = null;
+            ahuChain.ra = null;
+            ahuChain.stages = [];
+            ahuChain.mixRatio = 0.2;
+            syncAhuToChart();
+        });
+    }
+
+    if (ahuResetLabelsBtn) {
+        ahuResetLabelsBtn.addEventListener('click', () => {
+            for (let key in labelOffsets) delete labelOffsets[key];
+            if (typeof syncHtmlLabels === 'function') syncHtmlLabels();
+        });
+    }
     ahuCancelBtn.addEventListener('click', () => setAhuAddMode(null));
     ahuAddStageBtn.addEventListener('click', () => {
         if (!ahuChain.oa || !ahuChain.ra) return;
@@ -1477,6 +1757,16 @@ document.addEventListener('DOMContentLoaded', () => {
             slider.addEventListener('input', (e) => {
                 ahuChain.mixRatio = e.target.value / 100;
                 document.getElementById('ahu-mix-val').textContent = e.target.value + '%';
+                chart.ahuChain = ahuChain;
+                chart.ahuMA = getMA();
+                if (pinnedPoint && lastProps) {
+                    chart.drawDynamic(pinnedPoint.tdb, pinnedPoint.w, lastProps);
+                } else {
+                    chart.drawDynamic(null, null, null);
+                }
+                if (typeof syncHtmlLabels === 'function') syncHtmlLabels();
+            });
+            slider.addEventListener('change', () => {
                 syncAhuToChart();
             });
         }

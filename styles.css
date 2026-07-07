@@ -1027,6 +1027,52 @@ main {
     outline: none;
 }
 
+/* ---------- Overlay & Floating Labels ---------- */
+#label-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Only the labels themselves should receive events */
+    overflow: hidden;
+}
+
+.floating-node-label {
+    position: absolute;
+    transform: translate(-50%, -100%); /* Center horizontally, sit above the point */
+    margin-top: -8px; /* Gap from the point */
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 3px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    pointer-events: auto; /* Enable hover/drag */
+    cursor: grab;
+    user-select: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    transition: box-shadow 0.2s, transform 0.1s;
+    white-space: nowrap;
+    z-index: 10;
+}
+.floating-node-label:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 11;
+}
+.floating-node-label:active, .floating-node-label.dragging {
+    cursor: grabbing;
+    transform: translate(-50%, -100%) scale(1.02);
+}
+
+.floating-node-label .val {
+    font-weight: 400;
+    font-family: 'JetBrains Mono', monospace;
+    opacity: 0.8;
+    margin-left: 4px;
+}
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
