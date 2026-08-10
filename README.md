@@ -2,9 +2,9 @@
 
 > **An ASHRAE-accurate, fully interactive psychrometric chart — no frameworks, no build steps, just pure HTML, CSS & JavaScript.**
 
-I've always found psychrometric charts irritating to read manually (yes, I'm that person). So I built one you can actually *play* with — hover around, pin a point, tweak any value, and watch everything update in real time. It even shows you the math behind every number with live-rendered formulas.
+I've always found psychrometric charts irritating to read manually (yes, I'm that person). So I built one you can actually *play* with. U can hover around, pin a point, tweak any value, and watch everything update in real time. It even shows you the math behind every number with live-rendered formulas.
 
-**The ideas, layout, and design are all mine.** The coding was done with the help of Antigravity. Every feature, every toggle, every "make the labels crisper" decision came from my head. The AI just made it happen faster.
+**The ideas, layout, and design are all mine.** The coding was done with the help of Antigravity. Every feature, every toggle, every decision came from my head. The AI just made it happen faster. And tbh it did a pretty amazing job at that I feel
 
 ---
 
@@ -67,7 +67,9 @@ psychrometric-chart/
 
 ## 📱 Works on Mobile
 
-Yep. Drag your finger across the chart to explore, tap to pin. The layout flips to vertical on smaller screens. Is it *as nice* as on a big monitor? Honestly, psychrometric charts deserve screen real estate — but it works.
+Yep. Drag your finger across the chart to explore, tap to pin. The layout flips to vertical on smaller screens. 
+Is it *as nice* as on a big monitor? Honestly no
+Psychrometric charts deserve screen real estate — but if u want to check on phone it works.
 
 ---
 
